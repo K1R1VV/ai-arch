@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "arch-ai"
+version = "0.1.0"
+description = "AI System Skeleton based on Clean Architecture"
+authors = ["Kirill S <kiril30ru@gmail.com>"]
+readme = "README.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pydantic = "^2.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4"
+pytest-cov = "^4.1"
+pytest-mock = "^3.11"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
