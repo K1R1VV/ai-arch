@@ -1,58 +1,45 @@
+import os
 import sys
-import argparse
-import logging
-from src.domain.entities import PatientVitals
-from src.application.services import DiagnosticService
-from src.infrastructure.models import ThresholdMockModel
+from src.infrastructure.storage import S3Storage
+from src.application.services import DataSyncService, RecommendationService
 
-class HealthCheckCLI:   
-    def __init__(self):
-        self.classifier = ThresholdMockModel()
-        self.service = DiagnosticService(self.classifier)
-    
-    def parse_arguments(self) -> PatientVitals:
-        parser = argparse.ArgumentParser(
-            description="Оценка риска сердечно-сосудистых заболеваний на основе медицинских показателей",
-            formatter_class=argparse.RawTextHelpFormatter
-        )
-        parser.add_argument("--age", type=int, required=True, help="Возраст пациента (лет)")
-        parser.add_argument("--cholesterol", type=float, required=True, 
-                          help="Уровень холестерина (ммоль/л)")
-        parser.add_argument("--heart-rate", type=int, required=True, 
-                          dest="heart_rate", help="Пульс (ударов в минуту)")
-        
-        args = parser.parse_args()
+def main():
+    s3_config = {
+        "endpoint_url": os.getenv("MINIO_ENDPOINT"),
+        "access_key": os.getenv("MINIO_ACCESS_KEY"),
+        "secret_key": os.getenv("MINIO_SECRET_KEY"),
+        "bucket": os.getenv("MINIO_BUCKET", "datasets")
+    }
 
-        return PatientVitals(
-            age=args.age,
-            cholesterol=args.cholesterol,
-            heart_rate=args.heart_rate
+    storage = S3Storage(**s3_config)
+
+    sync_service = DataSyncService(storage=storage)
+    try:
+        sync_service.sync_dataset(
+            remote_path="data/ratings.csv",
+            local_path="data/ratings.csv"
         )
-    
-    def run(self):
+    except Exception as e:
+        print(f"[Warning] Не удалось синхронизировать данные: {e}")
+        print("Продолжаем работу с локальными файлами...")
+
+    rec_service = RecommendationService(data_path="data/ratings.csv")
+    user_id = 1
+    if len(sys.argv) > 1:
         try:
-            vitals = self.parse_arguments()
-            assessment = self.service.assess_risk(vitals)
-            report = self.service.generate_report(vitals, assessment)
-            print(report)
-            sys.exit(0)
-        except SystemExit as e:
-            raise
-        except ValueError as e:
-            print(f"Ошибка валидации данных: {e}", file=sys.stderr)
-            sys.exit(1)
-        except Exception as e:
-            print(f"Critical error: {e}", file=sys.stderr)
-            sys.exit(1)
+            user_id = int(sys.argv[1])
+        except ValueError:
+            print("Invalid user_id. Using default 1.")
+            
+    print(f"Running recommendations for User ID: {user_id}")
+    results = rec_service.get_recommendations(user_id)
 
+    if not results:
+        print("No recommendations found.")
+    else:
+        for rec in results:
+            print(f"Movie ID: {rec.movie_id}, Score: {rec.predicted_score}")
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler()]
-    )
-    
-    cli = HealthCheckCLI()
-    cli.run()
+    main()

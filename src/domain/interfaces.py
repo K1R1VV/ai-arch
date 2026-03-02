@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
-from src.domain.entities import PatientVitals, RiskAssessment
 
-class IHealthClassifier(ABC):
-    """Абстрактный интерфейс модели ИИ."""
-    
+class IDataStorage(ABC):
+
     @abstractmethod
-    def assess(self, vitals: PatientVitals) -> RiskAssessment:
-        """Метод для выполнения предсказания."""
+    def download_file(self, remote_path: str, local_path: str) -> None:
+        pass
+
+    @abstractmethod
+    def upload_file(self, local_path: str, remote_path: str) -> None:
         pass

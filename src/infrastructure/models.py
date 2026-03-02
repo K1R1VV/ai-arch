@@ -1,21 +1,49 @@
-from src.domain.interfaces import IHealthClassifier
-from src.domain.entities import PatientVitals, RiskAssessment
+import pandas as pd
+from pathlib import Path
+from typing import List
+from src.domain.entities import Rating, Recommendation
 
-class ThresholdMockModel(IHealthClassifier):
-    def __init__(self, cholesterol_threshold: float = 6.0, age_threshold: int = 60):
-        self._cholesterol_threshold = cholesterol_threshold
-        self._age_threshold = age_threshold
+class IMovieRecommender:
+    def __init__(self, data_path: str):
+        self.data_path = data_path
+        self.df: pd.DataFrame = pd.DataFrame()
+        self._load_data()
+
+    def _load_data(self) -> None:
+        path = Path(self.data_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Dataset not found: {self.data_path}")
+        
+        self.df = pd.read_csv(path)
+        if self.df['rating'].min() < 0 or self.df['rating'].max() > 5:
+            print("[Warning] Detected potential noisy data in ratings (out of 0-5 range)")
+
+    def get_user_history(self, user_id: int) -> List[int]:
+        user_data = self.df[self.df['user_id'] == user_id]
+        return user_data['movie_id'].tolist()
+
+    def recommend(self, user_id: int, top_n: int = 3) -> List[Recommendation]:
+        if self.df.empty:
+            return []
+
+        viewed_movies = set(self.get_user_history(user_id))
     
-    def assess(self, vitals: PatientVitals) -> RiskAssessment:
-        is_high_risk = (
-            vitals.cholesterol > self._cholesterol_threshold or
-            vitals.age > self._age_threshold
-        )
+        candidates = self.df[~self.df['movie_id'].isin(viewed_movies)]
+        
+        if candidates.empty:
+            candidates = self.df
 
-        risk_level = "High" if is_high_risk else "Low"
+        agg = candidates.groupby('movie_id')['rating'].mean().reset_index()
+        agg.columns = ['movie_id', 'predicted_score']
 
-        cholesterol_factor = max(0.0, (vitals.cholesterol - self._cholesterol_threshold) / 2.0)
-        age_factor = max(0.0, (vitals.age - self._age_threshold) / 20.0)
-        probability = min(0.95, 0.7 + max(cholesterol_factor, age_factor)) if is_high_risk else 0.85
-
-        return RiskAssessment(risk_level=risk_level, probability=round(probability, 2))
+        agg = agg.sort_values(by='predicted_score', ascending=False).head(top_n)
+        
+        results = []
+        for _, row in agg.iterrows():
+            results.append(Recommendation(
+                movie_id=int(row['movie_id']),
+                predicted_score=round(float(row['predicted_score']), 2),
+                reason="Top rated by community"
+            ))
+            
+        return results

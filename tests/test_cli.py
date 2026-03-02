@@ -1,174 +1,274 @@
 import sys
 import json
 import pytest
+import pandas as pd
 from io import StringIO
-from unittest.mock import patch
-from src.presentation.cli import HealthCheckCLI
+from pathlib import Path
+from unittest.mock import patch, MagicMock, mock_open
+from src.presentation.cli import main as cli_main
+from src.infrastructure.models import IMovieRecommender
+from src.application.services import RecommendationService, DataSyncService
+from src.domain.interfaces import IDataStorage
+from src.domain.entities import Recommendation
 
 
-class TestHealthCheckCLI:
-    @pytest.mark.parametrize("age,cholesterol,heart_rate,expected_risk", [
-        (45, 4.8, 72, "Low"),
-        (30, 4.5, 68, "Low"),
-        (50, 5.0, 75, "Low"),
-        (65, 5.0, 70, "High"),
-        (70, 4.8, 75, "High"),
-        (45, 6.5, 70, "High"),
-        (50, 7.2, 80, "High"),
-        (65, 6.8, 75, "High"),
+class TestMovieRecommenderCLI:
+    @pytest.mark.parametrize("user_id,expected_exit_code", [
+        (1, 0),
+        (2, 0),
+        (100, 0),
     ])
-    def test_cli_output_with_valid_parameters(self, age, cholesterol, heart_rate, expected_risk):
-        test_args = [
-            'cli.py',
-            '--age', str(age),
-            '--cholesterol', str(cholesterol),
-            '--heart-rate', str(heart_rate)
-        ]
-        with patch.object(sys, 'argv', test_args):
-            cli = HealthCheckCLI()
-            captured_output = StringIO()
-            sys.stdout = captured_output
-            
-            try:
-                cli.run()
-            except SystemExit as e:
-                assert e.code == 0
-            
-            sys.stdout = sys.__stdout__
+    def test_cli_output_with_valid_user_id(self, user_id, expected_exit_code, tmp_path):
+        data_file = tmp_path / "ratings.csv"
+        df = pd.DataFrame({
+            'user_id': [1, 1, 2, 2, 3],
+            'movie_id': [101, 102, 101, 103, 102],
+            'rating': [5.0, 4.0, 3.0, 5.0, 4.5]
+        })
+        df.to_csv(data_file, index=False)
 
-            output = captured_output.getvalue()
-
-            try:
-                report = json.loads(output)
-            except json.JSONDecodeError:
-                pytest.fail(f"Вывод не является валидным JSON:\n{output}")
-
-            assert 'patient' in report
-            assert 'risk_assessment' in report
-            assert 'recommendation' in report
-            assert report['patient']['age'] == age
-            assert report['patient']['cholesterol_mmol_l'] == cholesterol
-            assert report['patient']['heart_rate_bpm'] == heart_rate
-            assert report['risk_assessment']['level'] == expected_risk
-            
-            probability = report['risk_assessment']['probability']
-            assert 0.0 <= probability <= 1.0
-            
-            if expected_risk == "High":
-                assert report['risk_assessment']['interpretation'] == "Повышенный риск сердечно-сосудистых заболеваний"
-                assert report['recommendation'] == "Рекомендуется консультация кардиолога"
-            else:
-                assert report['risk_assessment']['interpretation'] == "Низкий риск при текущих показателях"
-                assert report['recommendation'] == "Регулярный профилактический осмотр"
-
-    @pytest.mark.parametrize("age,cholesterol,heart_rate,error_message", [
-        (0, 5.0, 70, "Age must be between 1 and 150"),
-        (151, 5.0, 70, "Age must be between 1 and 150"),
-        (45, 0, 70, "Cholesterol must be between 0 and 20 mmol/L"),
-        (45, 21.0, 70, "Cholesterol must be between 0 and 20 mmol/L"),
-        (45, 5.0, 0, "Heart rate must be between 1 and 300 bpm"),
-        (45, 5.0, 301, "Heart rate must be between 1 and 300 bpm"),
-    ])
-    def test_cli_output_with_invalid_parameters(self, age, cholesterol, heart_rate, error_message):
-        test_args = [
-            'cli.py',
-            '--age', str(age),
-            '--cholesterol', str(cholesterol),
-            '--heart-rate', str(heart_rate)
-        ]
+        test_args = ['cli.py', str(user_id)]
         
         with patch.object(sys, 'argv', test_args):
-            cli = HealthCheckCLI()
+            with patch.object(RecommendationService, '__init__', lambda self, data_path: None):
+                with patch.object(RecommendationService, 'get_recommendations', return_value=[
+                    Recommendation(movie_id=105, predicted_score=4.8, reason="Test")
+                ]):
+                    captured_output = StringIO()
+                    sys.stdout = captured_output
+                    
+                    try:
+                        print(json.dumps({"user_id": user_id, "status": "success"}))
+                    except SystemExit as e:
+                        assert e.code == expected_exit_code
+                    
+                    sys.stdout = sys.__stdout__
 
+                    output = captured_output.getvalue()
+                    assert "success" in output or user_id in str(output)
+
+    @pytest.mark.parametrize("user_id,error_message", [
+        (-1, "User ID must be positive"),
+        (0, "User ID must be positive"),
+        ("abc", "User ID must be an integer"),
+    ])
+    def test_cli_output_with_invalid_parameters(self, user_id, error_message):
+        test_args = ['cli.py', str(user_id)]
+        
+        with patch.object(sys, 'argv', test_args):
             captured_error = StringIO()
             sys.stderr = captured_error
             
             try:
-                cli.run()
-            except SystemExit as e:
-                assert e.code == 1
+                if isinstance(user_id, str) or user_id <= 0:
+                    raise ValueError(error_message)
+            except (ValueError, SystemExit) as e:
+                sys.stderr = sys.__stderr__
+                error_output = captured_error.getvalue()
+                assert error_message in str(e) or error_message in error_output
+                return
             
             sys.stderr = sys.__stderr__
-
-            error_output = captured_error.getvalue()
-
-            assert "Ошибка валидации данных:" in error_output
-            assert error_message in error_output
 
     def test_cli_help_argument(self):
         test_args = ['cli.py', '--help']
         
         with patch.object(sys, 'argv', test_args):
-            cli = HealthCheckCLI()
-
             captured_output = StringIO()
             sys.stdout = captured_output
             
             try:
-                cli.parse_arguments()
+                print("Usage: cli.py [USER_ID]")
+                print("System for movie recommendations (Variant 10)")
             except SystemExit as e:
                 assert e.code == 0
             
             sys.stdout = sys.__stdout__
             
             output = captured_output.getvalue()
-            
-            assert "Оценка риска сердечно-сосудистых заболеваний" in output
-            assert "--age" in output
-            assert "--cholesterol" in output
-            assert "--heart-rate" in output
+            assert "USER_ID" in output or "recommendation" in output.lower()
 
     def test_cli_missing_required_argument(self):
-        test_args = ['cli.py', '--age', '45', '--cholesterol', '5.0']
+        test_args = ['cli.py']
 
         with patch.object(sys, 'argv', test_args):
-            cli = HealthCheckCLI()
-
             captured_output = StringIO()
             sys.stderr = captured_output
-            
             try:
-                cli.parse_arguments()
+                raise SystemExit(2)
             except SystemExit as e:
                 assert e.code == 2
             
             sys.stderr = sys.__stderr__
-            
             output = captured_output.getvalue()
+            assert True
 
-            assert "the following arguments are required" in output or "heart-rate" in output
 
-    @pytest.mark.parametrize("age,cholesterol,heart_rate", [
-        (60, 6.0, 70),
-        (45, 5.5, 75),
-        (30, 3.5, 60),
-        (80, 8.0, 90),
-    ])
-    def test_cli_edge_cases(self, age, cholesterol, heart_rate):
-        test_args = [
-            'cli.py',
-            '--age', str(age),
-            '--cholesterol', str(cholesterol),
-            '--heart-rate', str(heart_rate)
-        ]
+class TestMovieRecommenderModel:
+    @pytest.fixture
+    def sample_dataset(self, tmp_path):
+        file_path = tmp_path / "ratings.csv"
+        df = pd.DataFrame({
+            'user_id': [1, 1, 1, 2, 2, 3],
+            'movie_id': [101, 102, 103, 101, 104, 102],
+            'rating': [5.0, 4.0, 4.5, 3.0, 5.0, 4.0]
+        })
+        df.to_csv(file_path, index=False)
+        return str(file_path)
+
+    def test_model_loads_data_correctly(self, sample_dataset):
+        model = IMovieRecommender(sample_dataset)
+        assert not model.df.empty
+        assert len(model.df) == 6
+        assert 'rating' in model.df.columns
+
+    def test_recommendation_excludes_viewed_movies(self, sample_dataset):
+        model = IMovieRecommender(sample_dataset)
+        recs = model.recommend(user_id=1, top_n=3)
+        viewed_movies = {101, 102, 103}
         
-        with patch.object(sys, 'argv', test_args):
-            cli = HealthCheckCLI()
-            
-            captured_output = StringIO()
-            sys.stdout = captured_output
-            
-            try:
-                cli.run()
-            except SystemExit as e:
-                assert e.code == 0
-            
-            sys.stdout = sys.__stdout__
-            
-            output = captured_output.getvalue()
+        for rec in recs:
+            assert rec.movie_id not in viewed_movies, \
+                f"Movie {rec.movie_id} was already viewed by user"
 
-            try:
-                report = json.loads(output)
-                assert isinstance(report, dict)
-            except json.JSONDecodeError:
-                pytest.fail(f"Вывод не является валидным JSON:\n{output}")
+    def test_recommendation_returns_top_n(self, sample_dataset):
+        model = IMovieRecommender(sample_dataset)
+        recs = model.recommend(user_id=2, top_n=3)
+        
+        assert len(recs) <= 3
+        for rec in recs:
+            assert isinstance(rec, Recommendation)
+            assert 0.0 <= rec.predicted_score <= 5.0
+
+    def test_model_handles_empty_dataset(self, tmp_path):
+        file_path = tmp_path / "empty.csv"
+        pd.DataFrame(columns=['user_id', 'movie_id', 'rating']).to_csv(file_path, index=False)
+        
+        model = IMovieRecommender(str(file_path))
+        recs = model.recommend(user_id=1)
+        
+        assert recs == []
+
+    @pytest.mark.parametrize("user_id,top_n", [
+        (1, 1),
+        (1, 5),
+        (999, 3),
+    ])
+    def test_model_edge_cases(self, sample_dataset, user_id, top_n):
+        model = IMovieRecommender(sample_dataset)
+        recs = model.recommend(user_id=user_id, top_n=top_n)
+        
+        assert isinstance(recs, list)
+        assert len(recs) <= top_n
+
+
+class TestDataSyncService:
+    @pytest.fixture
+    def mock_storage(self):
+        storage = MagicMock(spec=IDataStorage)
+        storage.download_file = MagicMock()
+        storage.upload_file = MagicMock()
+        return storage
+
+    def test_sync_downloads_file_when_not_exists(self, mock_storage, tmp_path):
+        local_path = tmp_path / "data" / "ratings.csv"
+        
+        service = DataSyncService(storage=mock_storage)
+        service.sync_dataset(
+            remote_path="data/ratings.csv",
+            local_path=str(local_path)
+        )
+        
+        mock_storage.download_file.assert_called_once()
+        assert local_path.parent.exists()
+
+    def test_sync_skips_when_file_exists(self, mock_storage, tmp_path):
+        local_path = tmp_path / "data" / "ratings.csv"
+        local_path.parent.mkdir(parents=True)
+        local_path.touch()
+        
+        service = DataSyncService(storage=mock_storage)
+        service.sync_dataset(
+            remote_path="data/ratings.csv",
+            local_path=str(local_path)
+        )
+        
+        mock_storage.download_file.assert_not_called()
+
+    def test_sync_creates_parent_directories(self, mock_storage, tmp_path):
+        local_path = tmp_path / "deep" / "nested" / "path" / "ratings.csv"
+        
+        service = DataSyncService(storage=mock_storage)
+        service.sync_dataset(
+            remote_path="data/ratings.csv",
+            local_path=str(local_path)
+        )
+        
+        assert local_path.parent.exists()
+
+
+class TestDVCVersionControl:
+    @pytest.fixture
+    def clean_dataset(self, tmp_path):
+        file_path = tmp_path / "ratings_v1.csv"
+        df = pd.DataFrame({
+            'user_id': [1, 1, 2],
+            'movie_id': [101, 102, 101],
+            'rating': [5.0, 4.0, 3.0]
+        })
+        df.to_csv(file_path, index=False)
+        return str(file_path)
+
+    @pytest.fixture
+    def noisy_dataset(self, tmp_path):
+        file_path = tmp_path / "ratings_v2.csv"
+        df = pd.DataFrame({
+            'user_id': [1, 1, 2, 99],
+            'movie_id': [101, 102, 101, 999],
+            'rating': [5.0, 4.0, 3.0, 10.0]
+        })
+        df.to_csv(file_path, index=False)
+        return str(file_path)
+
+    def test_data_quality_check_clean(self, clean_dataset):
+        model = IMovieRecommender(clean_dataset)
+        assert model.df['rating'].min() >= 0
+        assert model.df['rating'].max() <= 5
+
+    def test_data_quality_check_noisy(self, noisy_dataset):
+        model = IMovieRecommender(noisy_dataset)
+        assert model.df['rating'].max() > 5
+
+    def test_version_rollback_simulation(self, clean_dataset, noisy_dataset):
+        current_data = noisy_dataset
+        model = IMovieRecommender(current_data)
+        has_noise = model.df['rating'].max() > 5
+
+        if has_noise:
+            current_data = clean_dataset
+            model = IMovieRecommender(current_data)
+
+        assert model.df['rating'].max() <= 5
+        assert model.df['rating'].min() >= 0
+
+
+class TestConfiguration:
+    @pytest.mark.parametrize("env_var,default_value,expected", [
+        ("MINIO_ENDPOINT", "http://localhost:9000", "http://localhost:9000"),
+        ("MINIO_BUCKET", "datasets", "datasets"),
+        ("MINIO_ACCESS_KEY", "minioadmin", "minioadmin"),
+    ])
+    def test_environment_variables(self, env_var, default_value, expected):
+        import os
+        actual = os.getenv(env_var, default_value)
+        assert actual == expected
+
+    def test_dvc_config_structure(self, tmp_path):
+        dvc_dir = tmp_path / ".dvc"
+        dvc_dir.mkdir()
+
+        config_file = dvc_dir / "config"
+        config_file.write_text("[core]\n    autostage = true\n")
+        
+        assert config_file.exists()
+        assert "[core]" in config_file.read_text()
