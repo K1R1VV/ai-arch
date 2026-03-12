@@ -14,31 +14,36 @@
 - FastAPI
 
 ## Быстрый старт
-0. **Создание .env файла:**
 
-Линукс
-```bash
-   cp .env.example .env
-```
+### 1. Создание .env файла
 
-CMD (Windows)
-```bash
-   copy .env.example .env
-```
-
-1. **Запуск инфраструктуры:**
+**Линукс/macOS:**
 
 ```bash
-   docker-compose up -d
+cp .env.example .env
 ```
 
-2. **Установка зависимостей:**
+**Windows (CMD):**
 
 ```bash
-   poetry install
+copy .env.example .env
 ```
 
-3. **Настройка DVC и загрузка данных:**
+### 2. Запуск инфраструктуры
+
+```bash
+docker-compose up -d
+```
+
+MinIO будет доступен по адресу `http://localhost:9000` с учетными данными из `.env`.
+
+### 3. Установка зависимостей
+
+```bash
+poetry install
+```
+
+### 3. Инициализация и настройка dvc:
 
 ```bash
    poetry run dvc init
@@ -46,112 +51,129 @@ CMD (Windows)
    poetry run dvc remote modify storage endpointurl http://localhost:9000
    poetry run dvc remote modify storage access_key_id minioadmin
    poetry run dvc remote modify storage secret_access_key minioadmin
-
-   # Загрузка демо-данных в MinIO
-   poetry run python scripts/init_minio.py
 ```
 
-4. **Коммит чистых данных:**
+### 4. Инициализация MinIO (только первый раз)
+
+Если в MinIO ещё нет данных, загрузите их:
 
 ```bash
-   poetry run dvc add data/ratings.csv
-   git add data/ratings.csv.dvc .gitignore
-   git commit -m "v1.0: Clean dataset initialization"
-   poetry run dvc push
+poetry run python scripts/init_minio.py
 ```
 
-5. **Имитация "Шумных" данных (Версия 2.0):**
-Для линукс
-```bash
-    # 1. Добавляем шумные данные в файл
-   echo "99,999,10.0" >> data/ratings.csv
-   echo "98,998,-5.0" >> data/ratings.csv
-```
+Это создаст бакет `datasets` и загрузит демо-данные `data/ratings.csv`.
 
-Для CMD
-```bash
-   # 1. Добавляем шумные данные в файл
-   echo 99,999,10.0 >> data/ratings.csv
-   echo 98,998,-5.0 >> data/ratings.csv
-```
+### 5. Подготовка данных
+
+Скачайте данные из MinIO в локальный проект:
 
 ```bash
-    # 2. Фиксируем новую версию
-    poetry run dvc add data/ratings.csv
-    git add data/ratings.csv.dvc
-    git commit -m "v2.0: Added noisy data (simulation)"
-    poetry run dvc push
+poetry run python scripts/setup_data.py
 ```
 
-6. **Запуск для теста:**
+Эта команда выполнит `dvc pull` и загрузит данные в папку `data/`
+
+Или вручную через DVC:
 
 ```bash
-   poetry run python -m src.presentation.cli 1  
+poetry run dvc pull
 ```
 
-#### Вместо <user_id> можно подставить другой user_id 
+### 6. Запуск приложения
+
+**CLI для получения рекомендаций:**
 
 ```bash
-   poetry run python -m src.presentation.cli <user_id> #CLI
+poetry run python -m src.presentation.cli <user_id>
 ```
 
-7. **Откат к чистой версии:**
+Пример:
 
 ```bash
-    # 1. Смотрим историю коммитов
-   git log --oneline
+poetry run python -m src.presentation.cli 1
 ```
+
+**FastAPI сервер (рекомендации через HTTP API):**
 
 ```bash
-   # 2. Откатываем Git к предыдущему коммиту (замените HASH на хеш коммита v1.0)
-   git checkout <HASH_COMMIT_V1.0>
+poetry run uvicorn src.presentation.api:app --reload
 ```
+
+API будет доступен по адресу `http://localhost:8000`
+
+## API Endpoints
+
+### POST /recommend
+
+Получить рекомендации для пользователя
+
+**Request:**
+
+```json
+{
+  "user_id": 1
+}
+```
+
+**Response:**
+
+```json
+[
+  {
+    "movie_id": 105,
+    "predicted_score": 4.8,
+    "reason": "Based on your ratings"
+  }
+]
+```
+
+### POST /api/v1/data/sync
+
+Синхронизировать данные с MinIO (опционально)
+
+**Request:**
+
+```json
+{
+  "remote_path": "data/ratings.csv",
+  "local_path": "data/ratings.csv"
+}
+```
+
+**Response:**
+
+```json
+{
+  "status": "success",
+  "message": "Данные синхронизированы: data/ratings.csv"
+}
+```
+
+## Запуск тестов
 
 ```bash
-   # 3. Восстанавливаем версию файла данных согласно этому коммиту
-   poetry run dvc checkout
-```
-Для линукс
-```bash
-   # 4. Проверяем файл (шумных строк 99,999 и 98,998 больше нет)
-   cat data/ratings.csv
+poetry run pytest tests/ -v
 ```
 
-Для CMD
-```bash
-   type data\ratings.csv
-```
+Для запуска с дополнительной информацией:
 
 ```bash
-    # 5. Запускаем приложение (теперь без предупреждений)
-   poetry run python -m src.presentation.cli 1
+poetry run pytest tests/ -v -s
 ```
-#### Вместо <user_id> можно подставить другой user_id 
+
+Запуск конкретного тестового файла:
 
 ```bash
-   poetry run python -m src.presentation.cli <user_id> #CLI
+poetry run pytest tests/test_cli.py -v
+poetry run pytest tests/test_storage_and_sync.py -v
 ```
 
-7. **Возврат в основную ветку:**
+## Управление данными
 
-```bash
-   git checkout main
-   poetry run dvc checkout
-```
+DVC используется для версионирования данных. Основные команды:
 
-8. **Общий запуск:**
+- **Загрузить данные:** `poetry run dvc pull`
+- **Проверить статус:** `poetry run dvc status`
+- **Откатить до предыдущей версии:** `poetry run dvc checkout`
 
-```bash
-   poetry run python -m src.presentation.cli <user_id> #CLI
-```
-
-```bash
-   poetry run uvicorn src.presentation.api:app --reload #API
-```
-
-
-8. **Запуск тестов:**
-
-```bash
-   poetry run pytest tests/test_cli.py -v -s
-```
+Данные версионируются автоматически при добавлении `.dvc` файлов в репозиторий.
