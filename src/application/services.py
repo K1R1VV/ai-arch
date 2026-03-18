@@ -1,6 +1,7 @@
 from src.domain.interfaces import IDataStorage
 from src.domain.entities import Recommendation
 from src.infrastructure.models import IMovieRecommender
+from typing import List
 from pathlib import Path
 
 class DataSyncService:
@@ -17,11 +18,11 @@ class DataSyncService:
             print(f"[Sync] Файл {local_path} уже существует. Пропускаю.")
 
 class RecommendationService:
-    def __init__(self, data_path: str):
-        self.model = IMovieRecommender(data_path)
+    def __init__(self, model: IMovieRecommender):
+        self.model = model
 
-    def get_recommendations(self, user_id: int) -> list[Recommendation]:
-        return self.model.recommend(user_id)
+    def get_recommendations(self, user_id: int, candidate_movies: List[dict], top_n: int = 3) -> list[Recommendation]:
+        return self.model.recommend(user_id, candidate_movies, top_n)
     
     def check_data_quality(self) -> bool:
         if self.model.df.empty:
@@ -29,3 +30,6 @@ class RecommendationService:
         if self.model.df['rating'].min() < 0 or self.model.df['rating'].max() > 5:
             return False
         return True
+    
+    def predict_rating(self, user_id: int, movie_id: int, year: int = 2023) -> float:
+        return self.model.predict_rating(user_id, movie_id, year)
