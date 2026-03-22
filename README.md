@@ -103,33 +103,33 @@ API будет доступен по адресу `http://localhost:8000`
 
 ## API Endpoints
 
-### POST /recommend
+### GET /
 
-Получить рекомендации для пользователя
+Проверка работоспособности API
 
-**Request:**
-
-```json
-{
-  "user_id": 1
-}
+```bash
+curl -X GET "http://127.0.0.1:8000/" -H "accept: application/json"
 ```
 
 **Response:**
 
 ```json
-[
-  {
-    "movie_id": 105,
-    "predicted_score": 4.8,
-    "reason": "Based on your ratings"
-  }
-]
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "model_loaded": true
+}
 ```
+
+---
 
 ### POST /api/v1/data/sync
 
-Синхронизировать данные с MinIO (опционально)
+Синхронизировать данные с MinIO
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/v1/data/sync" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"remote_path\": \"data/ratings.csv\", \"local_path\": \"data/ratings.csv\"}"
+```
 
 **Request:**
 
@@ -145,8 +145,105 @@ API будет доступен по адресу `http://localhost:8000`
 ```json
 {
   "status": "success",
-  "message": "Данные синхронизированы: data/ratings.csv"
+  "message": "Данные синхронизированы: data/ratings.csv",
+  "files_synced": null
 }
+```
+
+---
+
+### POST /api/v1/model/sync
+
+Синхронизировать и загрузить модель
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/v1/model/sync" -H "accept: application/json"
+```
+
+**Response:**
+
+```json
+{
+  "status": "success",
+  "message": "Модель синхронизирована и загружена",
+  "files_synced": null
+}
+```
+
+---
+
+### POST /api/v1/movies/predict_rating
+
+Предсказать рейтинг для пары пользователь/фильм
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/v1/movies/predict_rating" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"user_id\": 123, \"movie_id\": 456, \"year\": 2023}"
+```
+
+**Request:**
+
+```json
+{
+  "user_id": 123,
+  "movie_id": 456,
+  "year": 2023
+}
+```
+
+**Response:**
+
+```json
+{
+  "user_id": 123,
+  "movie_id": 456,
+  "predicted_rating": 4.5
+}
+```
+
+---
+
+### POST /api/v1/movies/recommend
+
+Получить рекомендации из списка кандидатов
+
+```bash
+curl -X POST "http://127.0.0.1:8000/api/v1/movies/recommend" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"user_id\": 1, \"candidates\": [{\"movie_id\": 101, \"year\": 2023}, {\"movie_id\": 102, \"year\": 2022}, {\"movie_id\": 103, \"year\": 2024}], \"top_n\": 3}"
+```
+
+**Request:**
+
+```json
+{
+  "user_id": 1,
+  "candidates": [
+    {"movie_id": 101, "year": 2023},
+    {"movie_id": 102, "year": 2022},
+    {"movie_id": 103, "year": 2024}
+  ],
+  "top_n": 3
+}
+```
+
+**Response:**
+
+```json
+[
+  {
+    "movie_id": 101,
+    "predicted_score": 4.8,
+    "reason": "Based on your ratings"
+  },
+  {
+    "movie_id": 103,
+    "predicted_score": 4.3,
+    "reason": "Based on your ratings"
+  },
+  {
+    "movie_id": 102,
+    "predicted_score": 3.9,
+    "reason": "Based on your ratings"
+  }
+]
 ```
 
 ## Запуск тестов

@@ -57,7 +57,7 @@ def train_and_convert():
     test_pred = model.predict(test_sample)[0]
     print(f"Тестовое предсказание: user=1, movie=101 → rating={test_pred:.2f}")
     
-    initial_type = [('float_input', FloatTensorType([None, 6]))]  # 3 числовых + 3 one-hot (упрощённо)
+    initial_type = [('float_input', FloatTensorType([None, 6]))]
     
     simple_model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
     simple_model.fit(X, y)

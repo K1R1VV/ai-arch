@@ -10,8 +10,15 @@ class TestONNXMovieRecommender:
     @pytest.fixture
     def mock_session(self):
         session = MagicMock()
-        session.get_inputs.return_value = [MagicMock(name='float_input')]
-        session.get_outputs.return_value = [MagicMock(name='variable')]
+        
+        mock_input = MagicMock()
+        mock_input.name = 'float_input'
+        session.get_inputs.return_value = [mock_input]
+        
+        mock_output = MagicMock()
+        mock_output.name = 'variable'
+        session.get_outputs.return_value = [mock_output]
+        
         session.run.return_value = [[4.2]]
         return session
 
