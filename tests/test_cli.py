@@ -6,7 +6,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open
 from src.presentation.cli import main as cli_main
-from src.infrastructure.models import IMovieRecommender
+from src.infrastructure.models import MovieRecommenderBase
 from src.application.services import RecommendationService, DataSyncService
 from src.domain.interfaces import IDataStorage
 from src.domain.entities import Recommendation
@@ -117,13 +117,13 @@ class TestMovieRecommenderModel:
         return str(file_path)
 
     def test_model_loads_data_correctly(self, sample_dataset):
-        model = IMovieRecommender(sample_dataset)
+        model = MovieRecommenderBase(sample_dataset)
         assert not model.df.empty
         assert len(model.df) == 6
         assert 'rating' in model.df.columns
 
     def test_recommendation_excludes_viewed_movies(self, sample_dataset):
-        model = IMovieRecommender(sample_dataset)
+        model = MovieRecommenderBase(sample_dataset)
         recs = model.recommend(user_id=1, top_n=3)
         viewed_movies = {101, 102, 103}
         
@@ -132,7 +132,7 @@ class TestMovieRecommenderModel:
                 f"Movie {rec.movie_id} was already viewed by user"
 
     def test_recommendation_returns_top_n(self, sample_dataset):
-        model = IMovieRecommender(sample_dataset)
+        model = MovieRecommenderBase(sample_dataset)
         recs = model.recommend(user_id=2, top_n=3)
         
         assert len(recs) <= 3
@@ -144,7 +144,7 @@ class TestMovieRecommenderModel:
         file_path = tmp_path / "empty.csv"
         pd.DataFrame(columns=['user_id', 'movie_id', 'rating']).to_csv(file_path, index=False)
         
-        model = IMovieRecommender(str(file_path))
+        model = MovieRecommenderBase(str(file_path))
         recs = model.recommend(user_id=1)
         
         assert recs == []
@@ -155,7 +155,7 @@ class TestMovieRecommenderModel:
         (999, 3),
     ])
     def test_model_edge_cases(self, sample_dataset, user_id, top_n):
-        model = IMovieRecommender(sample_dataset)
+        model = MovieRecommenderBase(sample_dataset)
         recs = model.recommend(user_id=user_id, top_n=top_n)
         
         assert isinstance(recs, list)
@@ -231,22 +231,22 @@ class TestDVCVersionControl:
         return str(file_path)
 
     def test_data_quality_check_clean(self, clean_dataset):
-        model = IMovieRecommender(clean_dataset)
+        model = MovieRecommenderBase(clean_dataset)
         assert model.df['rating'].min() >= 0
         assert model.df['rating'].max() <= 5
 
     def test_data_quality_check_noisy(self, noisy_dataset):
-        model = IMovieRecommender(noisy_dataset)
+        model = MovieRecommenderBase(noisy_dataset)
         assert model.df['rating'].max() > 5
 
     def test_version_rollback_simulation(self, clean_dataset, noisy_dataset):
         current_data = noisy_dataset
-        model = IMovieRecommender(current_data)
+        model = MovieRecommenderBase(current_data)
         has_noise = model.df['rating'].max() > 5
 
         if has_noise:
             current_data = clean_dataset
-            model = IMovieRecommender(current_data)
+            model = MovieRecommenderBase(current_data)
 
         assert model.df['rating'].max() <= 5
         assert model.df['rating'].min() >= 0

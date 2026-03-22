@@ -1,9 +1,12 @@
 import pandas as pd
 from pathlib import Path
 from typing import List
-from src.domain.entities import Rating, Recommendation
+from src.domain.entities import Recommendation
+from src.domain.interfaces import IMovieRecommender
 
-class IMovieRecommender:
+
+class MovieRecommenderBase(IMovieRecommender):
+    
     def __init__(self, data_path: str):
         self.data_path = data_path
         self.df: pd.DataFrame = pd.DataFrame()
@@ -21,6 +24,12 @@ class IMovieRecommender:
     def get_user_history(self, user_id: int) -> List[int]:
         user_data = self.df[self.df['user_id'] == user_id]
         return user_data['movie_id'].tolist()
+
+    def predict_rating(self, user_id: int, movie_id: int, year: int = 2023) -> float:
+        user_data = self.df[self.df['user_id'] == user_id]
+        if user_data.empty:
+            return 3.0
+        return float(user_data['rating'].mean())
 
     def recommend(self, user_id: int, top_n: int = 3) -> List[Recommendation]:
         if self.df.empty:
