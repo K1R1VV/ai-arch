@@ -13,6 +13,7 @@ venv/
 ENV/
 
 data/*.csv
+models/*.onnx
 data/**/*.csv
 data/*.json
 data/**/*.json

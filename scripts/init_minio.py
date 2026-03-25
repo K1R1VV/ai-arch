@@ -59,7 +59,7 @@ def upload_data():
     if Path(model_local_path).exists():
         print(f"[Init] Модель найдена локально: {model_local_path}")
         print(f"[Init] Загрузка '{model_local_path}' в бакет '{bucket_2}'...")
-        s3.upload_file(str(model_local_path), bucket_2, key)
+        s3.upload_file(str(model_local_path), bucket_2, model_local_path)
         print("[Init] Успешно! Модель v1.0 загружена в MinIO.")
     else:
         print(f"[Init] Модель не найдена локально. Обучите модель и выполните скрипт снова")
