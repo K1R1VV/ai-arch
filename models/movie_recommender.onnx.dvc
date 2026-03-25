@@ -1,0 +1,5 @@
+outs:
+- md5: 4261a6f00ef8bda5c981ca8cac1283d2
+  size: 93713
+  hash: md5
+  path: movie_recommender.onnx
