@@ -45,7 +45,7 @@ poetry install
 
 ### 4. Настройка dvc:
 
-Настройка удаленного хранилища для моделей 
+Настройка удаленного хранилища для моделей (если еще не настроено) 
 ```bash
   poetry run dvc remote add -d models_storage s3://models
   poetry run dvc remote modify models_storage endpointurl http://localhost:9000
@@ -71,7 +71,7 @@ poetry run python scripts/init_minio.py
 ### 7. Версионирование модели
 
 ```bash
-poetry run dvc add models/classifier.onnx
+poetry run dvc add models/movie_recommender.onnx
 poetry run dvc push -r models_storage
 ```
 
