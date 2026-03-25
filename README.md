@@ -7,7 +7,7 @@
 
 ## Стек
 
-- Python 3.10+
+- Python 3.11+
 - Poetry
 - Docker & Docker Compose (MinIO)
 - DVC (Data Version Control)
@@ -46,14 +46,27 @@ poetry install
 ### 4. Инициализация и настройка dvc:
 
 ```bash
-   poetry run dvc init
-   poetry run dvc remote add -d storage s3://datasets
-   poetry run dvc remote modify storage endpointurl http://localhost:9000
-   poetry run dvc remote modify storage access_key_id minioadmin
-   poetry run dvc remote modify storage secret_access_key minioadmin
+  poetry run dvc init
+  poetry run dvc remote add -d storage s3://datasets
+  poetry run dvc remote modify storage endpointurl http://localhost:9000
+  poetry run dvc remote modify storage access_key_id minioadmin
+  poetry run dvc remote modify storage secret_access_key minioadmin
+
+  poetry run dvc remote add -d models_storage s3://models
+  poetry run dvc remote modify models_storage endpointurl http://localhost:9000
+  poetry run dvc remote modify models_storage access_key_id minioadmin
+  poetry run dvc remote modify models_storage secret_access_key minioadmin
 ```
 
-### 5. Инициализация MinIO (только первый раз)
+### 5. Обучение модели
+
+Если в MinIO ещё нет данных, загрузите их:
+
+```bash
+poetry run python scripts/train_model.py
+```
+
+### 6. Инициализация MinIO (только первый раз)
 
 Если в MinIO ещё нет данных, загрузите их:
 
@@ -63,7 +76,7 @@ poetry run python scripts/init_minio.py
 
 Это создаст бакет `datasets` и загрузит демо-данные `data/ratings.csv`.
 
-### 6. Подготовка данных
+### 7. Подготовка данных
 
 Скачайте данные из MinIO в локальный проект:
 
@@ -79,7 +92,7 @@ poetry run python scripts/setup_data.py
 poetry run dvc pull
 ```
 
-### 7. Запуск приложения
+### 8. Запуск приложения
 
 **CLI для получения рекомендаций:**
 
@@ -263,6 +276,7 @@ poetry run pytest tests/ -v -s
 ```bash
 poetry run pytest tests/test_cli.py -v
 poetry run pytest tests/test_storage_and_sync.py -v
+poetry run pytest tests/test_onnx_model.py -v
 ```
 
 ## Управление данными
