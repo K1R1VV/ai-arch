@@ -31,3 +31,4 @@ data/**/*.json
 
 *.pyc
 .pytest_cache/
+models/movie_recommender.onnx
