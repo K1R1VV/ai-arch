@@ -45,7 +45,7 @@ poetry install
 
 ### 4. Настройка dvc:
 
-Настройка удаленного хранилища для моделей 
+Настройка удаленного хранилища для моделей (если еще не настроено) 
 ```bash
   poetry run dvc remote add -d models_storage s3://models
   poetry run dvc remote modify models_storage endpointurl http://localhost:9000
