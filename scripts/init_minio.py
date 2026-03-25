@@ -1,11 +1,12 @@
 import boto3
 import os
+import sys
 import pandas as pd
 from pathlib import Path
 from botocore.exceptions import ClientError
 
 
-def upload_demo_data():
+def upload_data():
     data_path = Path("data/ratings.csv")
     data_path.parent.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame({
@@ -41,6 +42,27 @@ def upload_demo_data():
     s3.upload_file(str(data_path), bucket, key)
     print("[Init] Успешно! Данные v1.0 загружены в MinIO.")
 
+    bucket_2 = os.getenv("MINIO_MODELS_BUCKET", "models")
+    model_local_path = "models/movie_recommender.onnx"
+    try:
+        s3.head_bucket(Bucket=bucket_2)
+        print(f"[Init] Бакет '{bucket_2}' уже существует.")
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        if error_code == '404' or error_code == 'NoSuchBucket':
+            print(f"[Init] Бакет '{bucket_2}' не найден. Создаю...")
+            s3.create_bucket(Bucket=bucket_2)
+            print(f"[Init] Бакет '{bucket_2}' успешно создан.")
+        else:
+            raise
+
+    if Path(model_local_path).exists():
+        print(f"[Init] Модель найдена локально: {model_local_path}")
+        print(f"[Init] Загрузка '{model_local_path}' в бакет '{bucket_2}'...")
+        s3.upload_file(str(model_local_path), bucket_2, key)
+        print("[Init] Успешно! Модель v1.0 загружена в MinIO.")
+    else:
+        print(f"[Init] Модель не найдена локально. Обучите модель и выполните скрипт снова")
 
 if __name__ == "__main__":
-    upload_demo_data()
+    upload_data()
