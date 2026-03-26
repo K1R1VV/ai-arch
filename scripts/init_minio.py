@@ -2,6 +2,7 @@ import boto3
 import os
 import sys
 import pandas as pd
+import numpy as np
 from pathlib import Path
 from botocore.exceptions import ClientError
 
@@ -9,11 +10,14 @@ from botocore.exceptions import ClientError
 def upload_data():
     data_path = Path("data/ratings.csv")
     data_path.parent.mkdir(parents=True, exist_ok=True)
-    df = pd.DataFrame({
-        'user_id': [1, 1, 1, 2, 2, 3, 3, 3],
-        'movie_id': [101, 102, 103, 101, 104, 102, 103, 105],
-        'rating': [5.0, 4.0, 4.5, 3.0, 5.0, 4.0, 4.5, 5.0]
-    })
+    data = {
+        'user_id': np.random.randint(1, 100, 500),
+        'movie_id': np.random.randint(1, 200, 500),
+        'genre': np.random.choice(['Action', 'Comedy', 'Drama', 'Sci-Fi', 'Horror'], 500),
+        'year': np.random.randint(1990, 2024, 500),
+        'rating': np.random.uniform(1.0, 5.0, 500)
+    }
+    df = pd.DataFrame(data)
     df.to_csv(data_path, index=False)
     print(f"[Init] Создан локальный файл {data_path}")
 
