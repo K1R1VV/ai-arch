@@ -53,19 +53,18 @@ poetry install
   poetry run dvc remote modify models_storage secret_access_key minioadmin
 ```
 
-### 5. Обучение модели
-
-
-```bash
-poetry run python scripts/train_model.py
-```
-
-### 6. Инициализация MinIO
+### 5. Инициализация MinIO
 
 Инициализация бакетов (datasets и models) и загрузка демо-данных:
 
 ```bash
 poetry run python scripts/init_minio.py
+```
+
+### 6. Обучение модели
+
+```bash
+poetry run python scripts/train_model.py
 ```
 
 ### 7. Версионирование модели
@@ -113,7 +112,8 @@ curl -X GET "http://127.0.0.1:8000/" -H "accept: application/json"
 {
   "status": "healthy",
   "version": "1.0.0",
-  "model_loaded": true
+  "model_loaded": true,
+  "model_path": "models/movie_recommender.onnx"
 }
 ```
 
@@ -173,7 +173,7 @@ curl -X POST "http://127.0.0.1:8000/api/v1/model/sync" -H "accept: application/j
 Предсказать рейтинг для пары пользователь/фильм
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/movies/predict_rating" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"user_id\": 123, \"movie_id\": 456, \"year\": 2023}"
+curl -X POST "http://127.0.0.1:8000/api/v1/movies/predict_rating" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"user_id\": 123, \"movie_id\": 456, \"year\": 2023, \"genre\": \"Sci-Fi\"}"
 ```
 
 **Request:**
@@ -182,7 +182,8 @@ curl -X POST "http://127.0.0.1:8000/api/v1/movies/predict_rating" -H "accept: ap
 {
   "user_id": 123,
   "movie_id": 456,
-  "year": 2023
+  "year": 2023,
+  "genre": "Sci-Fi"
 }
 ```
 
@@ -192,7 +193,7 @@ curl -X POST "http://127.0.0.1:8000/api/v1/movies/predict_rating" -H "accept: ap
 {
   "user_id": 123,
   "movie_id": 456,
-  "predicted_rating": 4.5
+  "predicted_rating": 3.03
 }
 ```
 
@@ -203,7 +204,7 @@ curl -X POST "http://127.0.0.1:8000/api/v1/movies/predict_rating" -H "accept: ap
 Получить рекомендации из списка кандидатов
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/movies/recommend" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"user_id\": 1, \"candidates\": [{\"movie_id\": 101, \"year\": 2023}, {\"movie_id\": 102, \"year\": 2022}, {\"movie_id\": 103, \"year\": 2024}], \"top_n\": 3}"
+curl -X POST "http://127.0.0.1:8000/api/v1/movies/recommend" -H "Content-Type: application/json" -d "{\"user_id\": 1, \"candidates\": [{\"movie_id\": 101, \"year\": 2023, \"genre\": \"Action\"}, {\"movie_id\": 102, \"year\": 2022, \"genre\": \"Comedy\"}, {\"movie_id\": 103, \"year\": 2024, \"genre\": \"Drama\"}], \"top_n\": 3}"
 ```
 
 **Request:**
@@ -212,9 +213,9 @@ curl -X POST "http://127.0.0.1:8000/api/v1/movies/recommend" -H "accept: applica
 {
   "user_id": 1,
   "candidates": [
-    {"movie_id": 101, "year": 2023},
-    {"movie_id": 102, "year": 2022},
-    {"movie_id": 103, "year": 2024}
+    {"movie_id": 101, "year": 2023, "genre": "Action"},
+    {"movie_id": 102, "year": 2022, "genre": "Comedy"},
+    {"movie_id": 103, "year": 2024, "genre": "Drama"}
   ],
   "top_n": 3
 }
@@ -227,17 +228,17 @@ curl -X POST "http://127.0.0.1:8000/api/v1/movies/recommend" -H "accept: applica
   {
     "movie_id": 101,
     "predicted_score": 4.8,
-    "reason": "Based on your ratings"
+    "reason": "ONNX prediction for genre=Action"
   },
   {
     "movie_id": 103,
     "predicted_score": 4.3,
-    "reason": "Based on your ratings"
+    "reason": "ONNX prediction for genre=Drama"
   },
   {
     "movie_id": 102,
     "predicted_score": 3.9,
-    "reason": "Based on your ratings"
+    "reason": "ONNX prediction for genre=Comedy"
   }
 ]
 ```

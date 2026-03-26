@@ -1,8 +1,7 @@
 import os
 from contextlib import asynccontextmanager
-from functools import lru_cache
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from src.infrastructure.onnx_model import ONNXMovieRecommender
 from src.application.services import DataSyncService, RecommendationService
@@ -14,6 +13,7 @@ class PredictRatingRequest(BaseModel):
     user_id: int = Field(..., example=123, description="ID пользователя")
     movie_id: int = Field(..., example=456, description="ID фильма")
     year: Optional[int] = Field(2023, description="Год выпуска фильма")
+    genre: Optional[str] = Field("Action", description="Жанр фильма")
 
 
 class PredictRatingResponse(BaseModel):
@@ -25,6 +25,7 @@ class PredictRatingResponse(BaseModel):
 class MovieCandidate(BaseModel):
     movie_id: int
     year: Optional[int] = 2023
+    genre: Optional[str] = "Action"
 
 
 class RecommendRequest(BaseModel):
@@ -48,21 +49,74 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     model_loaded: bool = False
+    model_path: Optional[str] = None
+
+
+_model_instance: Optional[ONNXMovieRecommender] = None
+_model_path = "models/movie_recommender.onnx"
+
+
+def get_model() -> Optional[ONNXMovieRecommender]:
+    global _model_instance
+    return _model_instance
+
+
+def _sync_model_from_storage() -> bool:
+    try:
+        s3_config = {
+            "endpoint_url": os.getenv("MINIO_ENDPOINT", "http://localhost:9000"),
+            "access_key": os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
+            "secret_key": os.getenv("MINIO_SECRET_KEY", "minioadmin"),
+        }
+        storage = S3Storage(bucket="models", **s3_config)
+        sync_service = DataSyncService(storage=storage)
+        sync_service.sync_dataset(
+            remote_path="movie_recommender.onnx",
+            local_path=_model_path
+        )
+        return True
+    except Exception as e:
+        print(f"[Model Sync] Ошибка синхронизации: {e}")
+        return False
+
+
+def load_model() -> ONNXMovieRecommender:
+    global _model_instance
+    print(f"[Model] Загрузка модели из {_model_path}...")
+    _model_instance = ONNXMovieRecommender(_model_path)
+    return _model_instance
+
+
+async def _auto_load_model_on_startup():
+    print("[Startup] Инициализация модели...")
+    
+    if os.path.exists(_model_path):
+        try:
+            load_model()
+            print(f"[Startup] Модель загружена из {_model_path}")
+            return
+        except Exception as e:
+            print(f"[Startup] Ошибка загрузки локальной модели: {e}")
+    
+    print(f"[Startup] Модель не найдена локально. Попытка синхронизации...")
+    if _sync_model_from_storage():
+        try:
+            load_model()
+            print(f"[Startup] Модель синхронизирована и загружена")
+            return
+        except Exception as e:
+            print(f"[Startup] Ошибка загрузки после синхронизации: {e}")
+    
+    print(f"[Startup] Модель не загружена. Она будет загружена при первом запросе к /api/v1/model/sync")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("[Startup] API инициализирована.")
-    
-    try:
-        print("[Startup] Загрузка модели при запуске...")
-        load_model()
-        print("[Startup] Модель успешно загружена")
-    except Exception as e:
-        print(f"[Startup WARNING] Не удалось загрузить модель: {e}")
-        print("[Startup WARNING] Модель будет загружена при первом запросе")
+    await _auto_load_model_on_startup()
+    print("[Startup] API готова к работе")
     
     yield
+
     print("[Shutdown] Остановка сервера...")
 
 
@@ -73,29 +127,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-_model_instance = None
-
-
-def get_model() -> Optional[ONNXMovieRecommender]:
-    global _model_instance
-    return _model_instance
-
-
-def load_model() -> ONNXMovieRecommender:
-    global _model_instance
-    model_path = "models/movie_recommender.onnx"
-    print(f"[Model] Загрузка модели из {model_path}...")
-    _model_instance = ONNXMovieRecommender(model_path)
-    return _model_instance
-
 
 @app.get("/", response_model=HealthResponse, tags=["Health"])
 def health_check():
-    model_loaded = get_model() is not None
+    model = get_model()
     return HealthResponse(
         status="healthy",
         version="1.0.0",
-        model_loaded=model_loaded
+        model_loaded=model is not None,
+        model_path=_model_path if model else None
     )
 
 
@@ -128,22 +168,14 @@ def sync_data(request: SyncDataRequest):
 @app.post("/api/v1/model/sync", response_model=SyncResponse, tags=["Data Management"])
 def sync_model():
     try:
-        s3_config = {
-            "endpoint_url": os.getenv("MINIO_ENDPOINT", "http://localhost:9000"),
-            "access_key": os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
-            "secret_key": os.getenv("MINIO_SECRET_KEY", "minioadmin"),
-        }
-        storage = S3Storage(bucket="models", **s3_config)
-        sync_service = DataSyncService(storage=storage)
-        sync_service.sync_dataset(
-            remote_path="movie_recommender.onnx",
-            local_path="models/movie_recommender.onnx"
-        )
-        load_model()
-        return SyncResponse(
-            status="success",
-            message="Модель синхронизирована и загружена"
-        )
+        if _sync_model_from_storage():
+            load_model()
+            return SyncResponse(
+                status="success",
+                message="Модель синхронизирована и загружена"
+            )
+        else:
+            raise HTTPException(status_code=500, detail="Не удалось синхронизировать модель")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -152,16 +184,29 @@ def sync_model():
 def predict_rating(request: PredictRatingRequest):
     model = get_model()
     if not model:
+        try:
+            if os.path.exists(_model_path):
+                load_model()
+                model = get_model()
+            else:
+                _sync_model_from_storage()
+                load_model()
+                model = get_model()
+        except:
+            pass
+    
+    if not model:
         raise HTTPException(
             status_code=503,
-            detail="Модель не загружена. Выполните синхронизацию: POST /api/v1/model/sync"
+            detail="Модель не загружена. Попробуйте выполнить синхронизацию: POST /api/v1/model/sync"
         )
     
     try:
         rating = model.predict_rating(
             user_id=request.user_id,
             movie_id=request.movie_id,
-            year=request.year
+            year=request.year,
+            genre=request.genre
         )
         return PredictRatingResponse(
             user_id=request.user_id,
@@ -183,7 +228,14 @@ def get_recommendations(request: RecommendRequest):
     
     try:
         service = RecommendationService(model=model)
-        candidates = [{'movie_id': c.movie_id, 'year': c.year} for c in request.candidates]
+        candidates = [
+            {
+                'movie_id': c.movie_id, 
+                'year': c.year,
+                'genre': c.genre
+            } 
+            for c in request.candidates
+        ]
         recommendations = service.get_recommendations(
             user_id=request.user_id,
             candidate_movies=candidates,
