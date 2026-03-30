@@ -1,5 +1,10 @@
 import boto3
+import logging
 from src.domain.interfaces import IDataStorage
+
+
+logger = logging.getLogger(__name__)
+
 
 class S3Storage(IDataStorage): 
     def __init__(self, endpoint_url: str, access_key: str, secret_key: str, bucket: str):
@@ -12,9 +17,9 @@ class S3Storage(IDataStorage):
         self.bucket = bucket
 
     def download_file(self, remote_path: str, local_path: str) -> None:
-        print(f"[Storage] Скачивание {remote_path} -> {local_path}...")
+        logger.info(f"[Storage] Скачивание {remote_path} -> {local_path}...")
         self.s3.download_file(self.bucket, remote_path, local_path)
 
     def upload_file(self, local_path: str, remote_path: str) -> None:
-        print(f"[Storage] Загрузка {local_path} -> {remote_path}...")
+        logger.info(f"[Storage] Загрузка {local_path} -> {remote_path}...")
         self.s3.upload_file(local_path, self.bucket, remote_path)

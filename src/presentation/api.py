@@ -1,4 +1,6 @@
+import logging
 import os
+from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks
@@ -7,6 +9,14 @@ from src.infrastructure.onnx_model import ONNXMovieRecommender
 from src.application.services import DataSyncService, RecommendationService
 from src.infrastructure.storage import S3Storage
 from src.domain.entities import Recommendation
+
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s | %(levelname)-8s | %(name)s:%(lineno)d | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger(__name__)
 
 
 class PredictRatingRequest(BaseModel):
@@ -37,12 +47,12 @@ class RecommendRequest(BaseModel):
 class SyncDataRequest(BaseModel):
     remote_path: str = Field("data/ratings.csv", description="Путь на удаленном хранилище")
     local_path: str = Field("data/ratings.csv", description="Локальный путь")
+    force: bool = Field(True, description="Перезаписать существующий файл") 
 
 
 class SyncResponse(BaseModel):
     status: str
     message: str
-    files_synced: Optional[int] = None
 
 
 class HealthResponse(BaseModel):
@@ -56,6 +66,20 @@ _model_instance: Optional[ONNXMovieRecommender] = None
 _model_path = "models/movie_recommender.onnx"
 
 
+def _get_s3_config(bucket: str = "datasets") -> dict:
+    return {
+        "endpoint_url": os.getenv("MINIO_ENDPOINT", "http://localhost:9000"),
+        "access_key": os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
+        "secret_key": os.getenv("MINIO_SECRET_KEY", "minioadmin"),
+        "bucket": os.getenv(f"MINIO_BUCKET", bucket)
+    }
+
+
+def get_storage(bucket: str = "datasets") -> S3Storage:
+    config = _get_s3_config(bucket=bucket)
+    return S3Storage(**config)
+
+
 def get_model() -> Optional[ONNXMovieRecommender]:
     global _model_instance
     return _model_instance
@@ -63,61 +87,57 @@ def get_model() -> Optional[ONNXMovieRecommender]:
 
 def _sync_model_from_storage() -> bool:
     try:
-        s3_config = {
-            "endpoint_url": os.getenv("MINIO_ENDPOINT", "http://localhost:9000"),
-            "access_key": os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
-            "secret_key": os.getenv("MINIO_SECRET_KEY", "minioadmin"),
-        }
-        storage = S3Storage(bucket="models", **s3_config)
+        storage = get_storage(bucket="models")
         sync_service = DataSyncService(storage=storage)
         sync_service.sync_dataset(
-            remote_path="movie_recommender.onnx",
-            local_path=_model_path
+            remote_path="models/movie_recommender.onnx",
+            local_path=_model_path,
+            force=True
         )
         return True
     except Exception as e:
-        print(f"[Model Sync] Ошибка синхронизации: {e}")
+        logger.error(f"[Model Sync] Ошибка синхронизации: {e}")
         return False
 
 
 def load_model() -> ONNXMovieRecommender:
     global _model_instance
-    print(f"[Model] Загрузка модели из {_model_path}...")
+    logger.info(f"[Model] Загрузка модели из {_model_path}...")
     _model_instance = ONNXMovieRecommender(_model_path)
     return _model_instance
 
 
 async def _auto_load_model_on_startup():
-    print("[Startup] Инициализация модели...")
+    logger.info("[Startup] Инициализация модели...")
     
-    if os.path.exists(_model_path):
-        try:
+    try:
+        if os.path.exists(_model_path):
             load_model()
-            print(f"[Startup] Модель загружена из {_model_path}")
+            logger.info(f"[Startup] Модель загружена из {_model_path}")
             return
-        except Exception as e:
-            print(f"[Startup] Ошибка загрузки локальной модели: {e}")
-    
-    print(f"[Startup] Модель не найдена локально. Попытка синхронизации...")
-    if _sync_model_from_storage():
-        try:
+    except Exception as e:
+       logger.error(f"[Startup] Ошибка загрузки локальной модели: {type(e).__name__}: {e}")
+
+    try:
+        logger.info(f"[Startup] Модель не найдена локально. Попытка синхронизации...")
+        if _sync_model_from_storage():
             load_model()
-            print(f"[Startup] Модель синхронизирована и загружена")
+            logger.info(f"[Startup] Модель синхронизирована и загружена")
             return
-        except Exception as e:
-            print(f"[Startup] Ошибка загрузки после синхронизации: {e}")
+    except Exception as e:
+        logger.error(f"[Startup] Ошибка синхронизации модели: {type(e).__name__}: {e}")
     
-    print(f"[Startup] Модель не загружена. Она будет загружена при первом запросе к /api/v1/model/sync")
+    logger.info(f"[Startup] Модель не загружена. Она будет загружена при первом запросе к /api/v1/model/sync")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await _auto_load_model_on_startup()
-    print("[Startup] API готова к работе")
+    logger.info("[Startup] API готова к работе")
     
     yield
 
-    print("[Shutdown] Остановка сервера...")
+    logger.info("[Shutdown] Остановка сервера...")
 
 
 app = FastAPI(
@@ -142,17 +162,13 @@ def health_check():
 @app.post("/api/v1/data/sync", response_model=SyncResponse, tags=["Data Management"])
 def sync_data(request: SyncDataRequest):
     try:
-        s3_config = {
-            "endpoint_url": os.getenv("MINIO_ENDPOINT", "http://localhost:9000"),
-            "access_key": os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
-            "secret_key": os.getenv("MINIO_SECRET_KEY", "minioadmin"),
-            "bucket": os.getenv("MINIO_BUCKET", "datasets")
-        }
-        storage = S3Storage(**s3_config)
+        storage = get_storage(bucket="datasets")
         sync_service = DataSyncService(storage=storage)
+
         sync_service.sync_dataset(
             remote_path=request.remote_path,
-            local_path=request.local_path
+            local_path=request.local_path,
+            force=request.force
         )
         return SyncResponse(
             status="success",
@@ -192,13 +208,27 @@ def predict_rating(request: PredictRatingRequest):
                 _sync_model_from_storage()
                 load_model()
                 model = get_model()
-        except:
-            pass
+        except FileNotFoundError as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Модель не найдена: {str(e)}. Выполните синхронизацию: POST /api/v1/model/sync"
+            )
+        except PermissionError as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Нет прав доступа к модели: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"[API] Ошибка загрузки модели: {type(e).__name__}: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Внутренняя ошибка загрузки модели: {type(e).__name__}"
+            )
     
     if not model:
         raise HTTPException(
             status_code=503,
-            detail="Модель не загружена. Попробуйте выполнить синхронизацию: POST /api/v1/model/sync"
+            detail="Модель не загружена. Выполните синхронизацию: POST /api/v1/model/sync"
         )
     
     try:
@@ -214,12 +244,35 @@ def predict_rating(request: PredictRatingRequest):
             predicted_rating=round(rating, 2)
         )
     except Exception as e:
+        logger.error(f"[API] Ошибка предсказания: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=f"Ошибка предсказания: {str(e)}")
 
 
 @app.post("/api/v1/movies/recommend", response_model=List[Recommendation], tags=["Recommendations"])
 def get_recommendations(request: RecommendRequest):
     model = get_model()
+    
+    if not model:
+        try:
+            if os.path.exists(_model_path):
+                load_model()
+                model = get_model()
+            else:
+                _sync_model_from_storage()
+                load_model()
+                model = get_model()
+        except FileNotFoundError as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Модель не найдена: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"[API] Ошибка загрузки модели: {type(e).__name__}: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Внутренняя ошибка загрузки модели: {type(e).__name__}"
+            )
+    
     if not model:
         raise HTTPException(
             status_code=503,
@@ -243,4 +296,5 @@ def get_recommendations(request: RecommendRequest):
         )
         return recommendations
     except Exception as e:
+        logger.error(f"[API] Ошибка генерации рекомендаций: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=f"Ошибка генерации рекомендаций: {str(e)}")

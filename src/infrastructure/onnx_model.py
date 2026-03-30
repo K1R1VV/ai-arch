@@ -3,6 +3,10 @@ import onnxruntime as ort
 from typing import List
 from src.domain.interfaces import IMovieRecommender
 from src.domain.entities import Recommendation
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class ONNXMovieRecommender(IMovieRecommender): 
@@ -12,8 +16,8 @@ class ONNXMovieRecommender(IMovieRecommender):
         self.input_names = [input.name for input in self.session.get_inputs()]
         self.output_names = [output.name for output in self.session.get_outputs()]
         
-        print(f"[ONNX] Модель загружена: {model_path}")
-        print(f"[ONNX] Входы: {self.input_names}, Выход: {self.output_names}")
+        logger.info(f"[ONNX] Модель загружена: {model_path}")
+        logger.info(f"[ONNX] Входы: {self.input_names}, Выход: {self.output_names}")
 
     def predict_rating(self, user_id: int, movie_id: int, year: int = 2023, genre: str = 'Action') -> float:
         input_feed = {

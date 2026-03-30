@@ -1,21 +1,29 @@
+import logging
 from src.domain.interfaces import IDataStorage, IMovieRecommender
 from src.domain.entities import Recommendation
 from typing import List
 from pathlib import Path
 
 
+logger = logging.getLogger(__name__)
+
+
 class DataSyncService:   
     def __init__(self, storage: IDataStorage):
         self.storage = storage
 
-    def sync_dataset(self, remote_path: str, local_path: str) -> None:
+    def sync_dataset(self, remote_path: str, local_path: str, force: bool = False) -> None:
         local_file = Path(local_path)
-        if not local_file.exists():
-            print(f"[Sync] Файл {local_path} не найден. Запрашиваю синхронизацию...")
-            local_file.parent.mkdir(parents=True, exist_ok=True)
-            self.storage.download_file(remote_path, local_path)
-        else:
-            print(f"[Sync] Файл {local_path} уже существует. Пропускаю.")
+        
+        if local_file.exists() and not force:
+            logger.info(f"[Sync] Файл {local_path} уже существует. Пропускаю (используйте force=True для обновления).")
+            return
+        
+        local_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"[Sync] Загрузка файла: {remote_path} → {local_path}")
+        self.storage.download_file(remote_path, local_path)
+        logger.info(f"[Sync] Файл успешно синхронизирован: {local_path}")
 
 
 class RecommendationService:   

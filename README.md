@@ -142,7 +142,6 @@ curl -X POST "http://127.0.0.1:8000/api/v1/data/sync" -H "accept: application/js
 {
   "status": "success",
   "message": "Данные синхронизированы: data/ratings.csv",
-  "files_synced": null
 }
 ```
 
