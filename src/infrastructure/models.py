@@ -3,6 +3,10 @@ from pathlib import Path
 from typing import List
 from src.domain.entities import Recommendation
 from src.domain.interfaces import IMovieRecommender
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class MovieRecommenderBase(IMovieRecommender):
@@ -19,7 +23,7 @@ class MovieRecommenderBase(IMovieRecommender):
         
         self.df = pd.read_csv(path)
         if self.df['rating'].min() < 0 or self.df['rating'].max() > 5:
-            print("[Warning] Detected potential noisy data in ratings (out of 0-5 range)")
+            logger.info("[Warning] Detected potential noisy data in ratings (out of 0-5 range)")
 
     def get_user_history(self, user_id: int) -> List[int]:
         user_data = self.df[self.df['user_id'] == user_id]

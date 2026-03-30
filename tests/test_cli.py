@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open
 from src.presentation.cli import main as cli_main
+from src.presentation.cli import load_candidate_movies
 from src.infrastructure.models import MovieRecommenderBase
 from src.application.services import RecommendationService, DataSyncService
 from src.domain.interfaces import IDataStorage
@@ -87,21 +88,6 @@ class TestMovieRecommenderCLI:
             
             output = captured_output.getvalue()
             assert "USER_ID" in output or "recommendation" in output.lower()
-
-    def test_cli_missing_required_argument(self):
-        test_args = ['cli.py']
-
-        with patch.object(sys, 'argv', test_args):
-            captured_output = StringIO()
-            sys.stderr = captured_output
-            try:
-                raise SystemExit(2)
-            except SystemExit as e:
-                assert e.code == 2
-            
-            sys.stderr = sys.__stderr__
-            output = captured_output.getvalue()
-            assert True
 
 
 class TestMovieRecommenderModel:
@@ -272,3 +258,24 @@ class TestConfiguration:
         
         assert config_file.exists()
         assert "[core]" in config_file.read_text()
+
+
+class TestLoadCandidateMovies:
+    @pytest.fixture
+    def temp_csv(self, tmp_path):
+        def _create_csv(data: dict, filename: str = "test.csv"):
+            file_path = tmp_path / filename
+            df = pd.DataFrame(data)
+            df.to_csv(file_path, index=False)
+            return str(file_path)
+        return _create_csv
+
+    def test_load_candidates_missing_user_id_column(self, temp_csv):
+        csv_path = temp_csv({
+            'movie_id': [101, 102],
+            'year': [2023, 2022],
+            'genre': ['Action', 'Comedy']
+        })
+
+        result = load_candidate_movies(csv_path, exclude_user_id=1)
+        assert result == []
