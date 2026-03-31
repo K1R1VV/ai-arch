@@ -67,11 +67,17 @@ poetry run python scripts/init_minio.py
 poetry run python scripts/train_model.py
 ```
 
-### 7. Версионирование модели
+### 7. Версионирование модели и загрука в хранилище
 
 ```bash
 poetry run dvc add models/movie_recommender.onnx
 poetry run dvc push -r models_storage
+```
+
+Для загрузки модели в удаленное хранилище воспользуемся скриптом:
+
+```bash
+poetry run python scripts/upload_model.py
 ```
 
 ### 8. Запуск приложения
