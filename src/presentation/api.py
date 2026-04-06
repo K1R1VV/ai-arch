@@ -7,7 +7,17 @@ from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from pydantic import BaseModel, Field
 
-from src.domain.entities import Recommendation
+from src.domain.entities import (
+    Recommendation,
+    PredictRatingRequest,
+    PredictRatingResponse,
+    MovieCandidate,
+    RecommendRequest,
+    SyncDataRequest,
+    SyncResponse,
+    HealthResponse,
+)
+
 from src.domain.interfaces import IMovieRecommender
 from src.application.services import RecommendationService, DataSyncService
 from src.presentation.dependencies import (
@@ -24,48 +34,6 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 logger = logging.getLogger(__name__)
-
-
-class PredictRatingRequest(BaseModel):
-    user_id: int = Field(..., example=123)
-    movie_id: int = Field(..., example=456)
-    year: Optional[int] = Field(2023)
-    genre: Optional[str] = Field("Action")
-
-
-class PredictRatingResponse(BaseModel):
-    user_id: int
-    movie_id: int
-    predicted_rating: float = Field(..., example=4.5)
-
-
-class MovieCandidate(BaseModel):
-    movie_id: int
-    year: Optional[int] = 2023
-    genre: Optional[str] = "Action"
-
-
-class RecommendRequest(BaseModel):
-    user_id: int = Field(..., example=1)
-    candidates: List[MovieCandidate] = Field(...)
-    top_n: Optional[int] = Field(3, ge=1, le=10)
-
-
-class SyncDataRequest(BaseModel):
-    remote_path: str = Field("data/ratings.csv")
-    local_path: str = Field("data/ratings.csv")
-    force: bool = Field(True)
-
-
-class SyncResponse(BaseModel):
-    status: str
-    message: str
-
-
-class HealthResponse(BaseModel):
-    status: str
-    version: str
-    model_loaded: bool = False
 
 
 @asynccontextmanager
