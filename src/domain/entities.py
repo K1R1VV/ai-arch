@@ -61,3 +61,14 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     model_loaded: bool = False
+
+
+class TaskResponse(BaseModel):
+    task_id: str
+
+
+class TaskResultResponse(BaseModel):
+    task_id: str
+    status: str
+    result: Optional[dict] = None
+    error: Optional[str] = None

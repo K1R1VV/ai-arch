@@ -56,6 +56,8 @@ def get_storage_factory():
 
 
 def get_recommendation_service(model: IMovieRecommender = Depends(get_model)) -> RecommendationService:
+    if model is None:
+        model = get_model()
     return RecommendationService(model=model)
 
 

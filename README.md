@@ -29,10 +29,12 @@ cp .env.example .env
 copy .env.example .env
 ```
 
-### 2. Запуск инфраструктуры
+### 2. Запуск хранилища
+
+Запустим хранилище Minio
 
 ```bash
-docker-compose up -d
+docker-compose up -d minio
 ```
 
 MinIO будет доступен по адресу `http://localhost:9000` с учетными данными из `.env`.
@@ -80,6 +82,14 @@ poetry run dvc push -r models_storage
 poetry run python scripts/upload_model.py
 ```
 
+### 8. Запуск инфраструктуры
+
+Запустим хранилище Minio
+
+```bash
+docker-compose up -d api worker
+```
+
 ### 8. Запуск приложения
 
 **CLI для получения рекомендаций:**
@@ -96,156 +106,54 @@ poetry run python -m src.presentation.cli 1
 
 **FastAPI сервер (рекомендации через HTTP API):**
 
-```bash
-poetry run uvicorn src.presentation.api:app --reload
-```
-
-API будет доступен по адресу `http://localhost:8000`
+Сервер запущен через докер, API доступно по адресу `http://localhost:8000`
 
 ## API Endpoints
 
-### GET /
+### POST /api/v1/movies/predict_rating_async
 
-Проверка работоспособности API
+Предсказать рейтинг
 
 ```bash
-curl -X GET "http://127.0.0.1:8000/" -H "accept: application/json"
+curl -X POST "http://127.0.0.1:8000/api/v1/movies/predict_rating_async" ^
+-H "Content-Type: application/json" ^
+-d "{\"user_id\": 123, \"movie_id\": 456, \"year\": 2023, \"genre\": \"Sci-Fi\"}"
 ```
 
 **Response:**
 
 ```json
-{
-  "status": "healthy",
-  "version": "1.0.0",
-  "model_loaded": true,
-  "model_path": "models/movie_recommender.onnx"
-}
+{"task_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"}
+```
+
+Получение статуса задачи
+
+```bash
+curl "http://127.0.0.1:8000/api/v1/movies/results/{task_id}"
 ```
 
 ---
 
-### POST /api/v1/data/sync
+### POST /api/v1/movies/recommend_for_user
 
-Синхронизировать данные с MinIO
+Получить рекомендации для пользователя
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/data/sync" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"remote_path\": \"data/ratings.csv\", \"local_path\": \"data/ratings.csv\"}"
-```
-
-**Request:**
-
-```json
-{
-  "remote_path": "data/ratings.csv",
-  "local_path": "data/ratings.csv"
-}
+curl -X POST "http://127.0.0.1:8000/api/v1/movies/recommend_for_user" ^
+-H "Content-Type: application/json" ^
+-d "{\"user_id\": 1, \"candidates\": [{\"movie_id\": 101, \"year\": 2023, \"genre\": \"Action\"}, {\"movie_id\": 102, \"year\": 2022, \"genre\": \"Comedy\"}, {\"movie_id\": 103, \"year\": 2024, \"genre\": \"Drama\"}], \"top_n\": 2}"
 ```
 
 **Response:**
 
 ```json
-{
-  "status": "success",
-  "message": "Данные синхронизированы: data/ratings.csv",
-}
+{"task_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"}
 ```
 
----
-
-### POST /api/v1/model/sync
-
-Синхронизировать и загрузить модель
+Получение статуса задачи
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/model/sync" -H "accept: application/json"
-```
-
-**Response:**
-
-```json
-{
-  "status": "success",
-  "message": "Модель синхронизирована и загружена",
-  "files_synced": null
-}
-```
-
----
-
-### POST /api/v1/movies/predict_rating
-
-Предсказать рейтинг для пары пользователь/фильм
-
-```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/movies/predict_rating" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"user_id\": 123, \"movie_id\": 456, \"year\": 2023, \"genre\": \"Sci-Fi\"}"
-```
-
-**Request:**
-
-```json
-{
-  "user_id": 123,
-  "movie_id": 456,
-  "year": 2023,
-  "genre": "Sci-Fi"
-}
-```
-
-**Response:**
-
-```json
-{
-  "user_id": 123,
-  "movie_id": 456,
-  "predicted_rating": 3.03
-}
-```
-
----
-
-### POST /api/v1/movies/recommend
-
-Получить рекомендации из списка кандидатов
-
-```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/movies/recommend" -H "Content-Type: application/json" -d "{\"user_id\": 1, \"candidates\": [{\"movie_id\": 101, \"year\": 2023, \"genre\": \"Action\"}, {\"movie_id\": 102, \"year\": 2022, \"genre\": \"Comedy\"}, {\"movie_id\": 103, \"year\": 2024, \"genre\": \"Drama\"}], \"top_n\": 3}"
-```
-
-**Request:**
-
-```json
-{
-  "user_id": 1,
-  "candidates": [
-    {"movie_id": 101, "year": 2023, "genre": "Action"},
-    {"movie_id": 102, "year": 2022, "genre": "Comedy"},
-    {"movie_id": 103, "year": 2024, "genre": "Drama"}
-  ],
-  "top_n": 3
-}
-```
-
-**Response:**
-
-```json
-[
-  {
-    "movie_id": 101,
-    "predicted_score": 4.8,
-    "reason": "ONNX prediction for genre=Action"
-  },
-  {
-    "movie_id": 103,
-    "predicted_score": 4.3,
-    "reason": "ONNX prediction for genre=Drama"
-  },
-  {
-    "movie_id": 102,
-    "predicted_score": 3.9,
-    "reason": "ONNX prediction for genre=Comedy"
-  }
-]
+curl "http://127.0.0.1:8000/api/v1/movies/results/{task_id}"
 ```
 
 ## Запуск тестов
@@ -266,6 +174,7 @@ poetry run pytest tests/ -v -s
 poetry run pytest tests/test_cli.py -v
 poetry run pytest tests/test_storage_and_sync.py -v
 poetry run pytest tests/test_onnx_model.py -v
+poetry run pytest tests/test_async.py -v
 ```
 
 ## Управление данными
