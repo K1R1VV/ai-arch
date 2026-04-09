@@ -1,26 +1,96 @@
 version: '3.8'
 
 services:
+  # Объектное хранилище (данные и модели)
   minio:
     image: minio/minio:latest
-    container_name: minio-server
+    container_name: movie-rec-minio
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
-      MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
-    volumes:
-      - minio_data:/data
-      - minio_config:/root/.minio
     command: server /data --console-address ":9001"
+    volumes:
+      - minio_storage:/data
+    networks:
+      - ai-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
-      timeout: 20s
+      timeout: 10s
       retries: 3
 
+  # Брокер сообщений (Redis)
+  broker:
+    image: redis:7-alpine
+    container_name: movie-rec-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # API сервис (FastAPI)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: movie-rec-api
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://broker:6379/0
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=datasets
+      - MODEL_PATH=/app/models/movie_recommender.onnx
+      - LOG_LEVEL=INFO
+    depends_on:
+      broker:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - ai-network
+    volumes:
+      - ./models:/app/models
+
+  # Worker сервис (Celery)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: movie-rec-worker
+    environment:
+      - REDIS_URL=redis://broker:6379/0
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=datasets
+      - MODEL_PATH=/app/models/movie_recommender.onnx
+      - LOG_LEVEL=INFO
+    depends_on:
+      broker:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      api:
+        condition: service_started
+    networks:
+      - ai-network
+    volumes:
+      - ./models:/app/models
+
 volumes:
-  minio_data:
-  minio_config:
+  minio_storage:
+
+networks:
+  ai-network:
+    driver: bridge
