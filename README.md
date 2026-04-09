@@ -50,20 +50,6 @@ docker-compose up -d
 ```
 
 
-### 7. Версионирование модели и загрука в хранилище
-
-```bash
-poetry run dvc add models/movie_recommender.onnx
-poetry run dvc push -r models_storage
-```
-
-Для загрузки модели в удаленное хранилище воспользуемся скриптом:
-
-```bash
-poetry run python scripts/upload_model.py
-```
-
-
 **FastAPI сервер (рекомендации через HTTP API):**
 
 Сервер запущен через докер, API доступно по адресу `http://localhost:8000`
