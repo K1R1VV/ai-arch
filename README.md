@@ -1,4 +1,4 @@
-# Лабораторная работа №2: Вариант 10 (Система рекомендаций фильмов)
+# Лабораторная работа №4: Вариант 10 (Система рекомендаций фильмов)
 
 ## Описание
 
@@ -29,45 +29,26 @@ cp .env.example .env
 copy .env.example .env
 ```
 
-### 2. Запуск хранилища
-
-Запустим хранилище Minio
-
-```bash
-docker-compose up -d minio
-```
-
-MinIO будет доступен по адресу `http://localhost:9000` с учетными данными из `.env`.
-
-### 3. Установка зависимостей
+### 2. Установка зависимостей
 
 ```bash
 poetry install
 ```
 
-### 4. Настройка dvc:
-
-Настройка удаленного хранилища для моделей (если еще не настроено) 
-```bash
-  poetry run dvc remote add -d models_storage s3://models
-  poetry run dvc remote modify models_storage endpointurl http://localhost:9000
-  poetry run dvc remote modify models_storage access_key_id minioadmin
-  poetry run dvc remote modify models_storage secret_access_key minioadmin
-```
-
-### 5. Инициализация MinIO
-
-Инициализация бакетов (datasets и models) и загрузка демо-данных:
-
-```bash
-poetry run python scripts/init_minio.py
-```
-
-### 6. Обучение модели
+### 3. Обучение модели
 
 ```bash
 poetry run python scripts/train_model.py
 ```
+
+### 4. Запуск сервиса
+
+Запустим всю систему
+
+```bash
+docker-compose up -d
+```
+
 
 ### 7. Версионирование модели и загрука в хранилище
 
@@ -82,27 +63,6 @@ poetry run dvc push -r models_storage
 poetry run python scripts/upload_model.py
 ```
 
-### 8. Запуск инфраструктуры
-
-Запустим хранилище Minio
-
-```bash
-docker-compose up -d api worker
-```
-
-### 8. Запуск приложения
-
-**CLI для получения рекомендаций:**
-
-```bash
-poetry run python -m src.presentation.cli <user_id>
-```
-
-Пример:
-
-```bash
-poetry run python -m src.presentation.cli 1
-```
 
 **FastAPI сервер (рекомендации через HTTP API):**
 
@@ -115,9 +75,7 @@ poetry run python -m src.presentation.cli 1
 Предсказать рейтинг
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/movies/predict_rating_async" ^
--H "Content-Type: application/json" ^
--d "{\"user_id\": 123, \"movie_id\": 456, \"year\": 2023, \"genre\": \"Sci-Fi\"}"
+curl -X POST "http://127.0.0.1:8000/api/v1/movies/predict_rating_async" -H "Content-Type: application/json" -d "{\"user_id\": 123, \"movie_id\": 456, \"year\": 2023, \"genre\": \"Sci-Fi\"}"
 ```
 
 **Response:**
@@ -130,6 +88,21 @@ curl -X POST "http://127.0.0.1:8000/api/v1/movies/predict_rating_async" ^
 
 ```bash
 curl "http://127.0.0.1:8000/api/v1/movies/results/{task_id}"
+```
+
+**Response:**
+
+```json
+{
+  "task_id":"9b55e844-e26f-4fae-a389-fc0d6914c1f0",
+  "status":"SUCCESS",
+  "result":{
+    "user_id":123,
+    "movie_id":456,
+    "predicted_rating":3.41
+  },
+  "error":null
+}
 ```
 
 ---
@@ -139,9 +112,7 @@ curl "http://127.0.0.1:8000/api/v1/movies/results/{task_id}"
 Получить рекомендации для пользователя
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/api/v1/movies/recommend_for_user" ^
--H "Content-Type: application/json" ^
--d "{\"user_id\": 1, \"candidates\": [{\"movie_id\": 101, \"year\": 2023, \"genre\": \"Action\"}, {\"movie_id\": 102, \"year\": 2022, \"genre\": \"Comedy\"}, {\"movie_id\": 103, \"year\": 2024, \"genre\": \"Drama\"}], \"top_n\": 2}"
+curl -X POST "http://127.0.0.1:8000/api/v1/movies/recommend_for_user" -H "Content-Type: application/json" -d "{\"user_id\": 1, \"candidates\": [{\"movie_id\": 101, \"year\": 2023, \"genre\": \"Action\"}, {\"movie_id\": 102, \"year\": 2022, \"genre\": \"Comedy\"}, {\"movie_id\": 103, \"year\": 2024, \"genre\": \"Drama\"}], \"top_n\": 2}"
 ```
 
 **Response:**
@@ -154,6 +125,31 @@ curl -X POST "http://127.0.0.1:8000/api/v1/movies/recommend_for_user" ^
 
 ```bash
 curl "http://127.0.0.1:8000/api/v1/movies/results/{task_id}"
+```
+
+**Response:**
+
+```json
+{
+  "task_id":"3de9f630-031b-4866-b1c2-79a956c8b908",
+  "status":"SUCCESS",
+  "result": {
+    "user_id":1,
+    "recommendations": [
+      {
+        "movie_id":103,
+        "predicted_score":2.94,
+        "reason":"Predicted by ONNX model"
+      },
+      {
+        "movie_id":102,
+        "predicted_score":2.78,
+        "reason":"Predicted by ONNX model"
+      }
+    ]
+  },
+  "error":null
+}
 ```
 
 ## Запуск тестов
