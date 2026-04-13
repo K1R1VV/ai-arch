@@ -1,4 +1,4 @@
-[![.github/workflows/ci.yml](https://github.com/K1R1VV/ai-arch/actions/workflows/ci.yml/badge.svg)](https://github.com/K1R1VV/ai-arch/actions/workflows/ci.yml)
+[![Movie Recommender CI/CD](https://github.com/K1R1VV/ai-arch/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/K1R1VV/ai-arch/actions/workflows/ci.yml)
 # Лабораторная работа №5: Вариант 10 (Система рекомендаций фильмов)
 
 ## Описание
