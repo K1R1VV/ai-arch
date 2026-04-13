@@ -21,12 +21,10 @@ from src.domain.entities import (
 )
 
 from src.domain.interfaces import IMovieRecommender
-from src.application.services import RecommendationService, DataSyncService
+from src.application.services import RecommendationService
 from src.presentation.dependencies import (
     get_model,
-    get_recommendation_service,
-    get_data_sync_service,
-    get_model_storage_service,
+    get_recommendation_service
 )
 from src.presentation.celery_app import celery_app
 from src.presentation.tasks import recommend_for_user_task, predict_rating_task
@@ -49,7 +47,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Movie Recommender API",
-    description="Вариант 10 ЛР №4: Асинхронная система рекомендаций фильмов",
+    description="Вариант 10 ЛР №5: CI/CD и управление жизненным циклом модели",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -101,7 +99,7 @@ def get_recommendation_results(task_id: str):
                 error=str(task_result.result)
             )
     
-    logger.debug(f"⏳ Задача {task_id} в статусе: {task_result.status}")
+    logger.debug(f"Задача {task_id} в статусе: {task_result.status}")
     return TaskResultResponse(
         task_id=task_id,
         status=task_result.status

@@ -1,28 +1,5 @@
-version: '3.8'
-
 services:
-  # Объектное хранилище (данные и модели)
-  minio:
-    image: minio/minio:latest
-    container_name: movie-rec-minio
-    ports:
-      - "9000:9000"  # API
-      - "9001:9001"  # Console
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data --console-address ":9001"
-    volumes:
-      - minio_storage:/data
-    networks:
-      - ai-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Брокер сообщений (Redis)
+  # Брокер сообщений
   broker:
     image: redis:7-alpine
     container_name: movie-rec-redis
@@ -36,6 +13,30 @@ services:
       timeout: 5s
       retries: 3
 
+  # MLflow Tracking Server
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.11.3
+    container_name: movie-rec-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlflow_artifacts:/mlflow/artifacts
+      - mlflow_db:/mlflow/db
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri file:///mlflow/db/mlflow.db
+      --artifacts-destination /mlflow/artifacts
+      --serve-artifacts
+    networks:
+      - ai-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # API сервис (FastAPI)
   api:
     build:
@@ -46,23 +47,20 @@ services:
       - "8000:8000"
     environment:
       - REDIS_URL=redis://broker:6379/0
-      - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_ACCESS_KEY=minioadmin
-      - MINIO_SECRET_KEY=minioadmin
-      - MINIO_BUCKET=datasets
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
       - MODEL_PATH=/app/models/movie_recommender.onnx
       - LOG_LEVEL=INFO
     depends_on:
       broker:
         condition: service_healthy
-      minio:
+      mlflow:
         condition: service_healthy
     networks:
       - ai-network
     volumes:
       - ./models:/app/models
 
-  # Worker сервис (Celery)
+  # Worker сервис
   worker:
     build:
       context: .
@@ -70,16 +68,13 @@ services:
     container_name: movie-rec-worker
     environment:
       - REDIS_URL=redis://broker:6379/0
-      - MINIO_ENDPOINT=http://minio:9000
-      - MINIO_ACCESS_KEY=minioadmin
-      - MINIO_SECRET_KEY=minioadmin
-      - MINIO_BUCKET=datasets
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
       - MODEL_PATH=/app/models/movie_recommender.onnx
       - LOG_LEVEL=INFO
     depends_on:
       broker:
         condition: service_healthy
-      minio:
+      mlflow:
         condition: service_healthy
       api:
         condition: service_started
@@ -88,8 +83,9 @@ services:
     volumes:
       - ./models:/app/models
 
+# Volumes
 volumes:
-  minio_storage:
+  mlflow_db:
 
 networks:
   ai-network:

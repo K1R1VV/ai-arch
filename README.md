@@ -35,6 +35,14 @@ copy .env.example .env
 poetry install
 ```
 
+### 3. Запуск контейнеров
+
+Запустим mlflow
+
+```bash
+docker-compose up -d mlflow
+```
+
 ### 3. Обучение модели
 
 ```bash
@@ -48,7 +56,6 @@ poetry run python scripts/train_model.py
 ```bash
 docker-compose up -d
 ```
-
 
 **FastAPI сервер (рекомендации через HTTP API):**
 
@@ -67,7 +74,7 @@ curl -X POST "http://127.0.0.1:8000/api/v1/movies/predict_rating_async" -H "Cont
 **Response:**
 
 ```json
-{"task_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"}
+{ "task_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
 ```
 
 Получение статуса задачи
@@ -80,14 +87,14 @@ curl "http://127.0.0.1:8000/api/v1/movies/results/{task_id}"
 
 ```json
 {
-  "task_id":"9b55e844-e26f-4fae-a389-fc0d6914c1f0",
-  "status":"SUCCESS",
-  "result":{
-    "user_id":123,
-    "movie_id":456,
-    "predicted_rating":3.41
+  "task_id": "9b55e844-e26f-4fae-a389-fc0d6914c1f0",
+  "status": "SUCCESS",
+  "result": {
+    "user_id": 123,
+    "movie_id": 456,
+    "predicted_rating": 3.41
   },
-  "error":null
+  "error": null
 }
 ```
 
@@ -104,7 +111,7 @@ curl -X POST "http://127.0.0.1:8000/api/v1/movies/recommend_for_user" -H "Conten
 **Response:**
 
 ```json
-{"task_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"}
+{ "task_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
 ```
 
 Получение статуса задачи
@@ -117,24 +124,24 @@ curl "http://127.0.0.1:8000/api/v1/movies/results/{task_id}"
 
 ```json
 {
-  "task_id":"3de9f630-031b-4866-b1c2-79a956c8b908",
-  "status":"SUCCESS",
+  "task_id": "3de9f630-031b-4866-b1c2-79a956c8b908",
+  "status": "SUCCESS",
   "result": {
-    "user_id":1,
+    "user_id": 1,
     "recommendations": [
       {
-        "movie_id":103,
-        "predicted_score":2.94,
-        "reason":"Predicted by ONNX model"
+        "movie_id": 103,
+        "predicted_score": 2.94,
+        "reason": "Predicted by ONNX model"
       },
       {
-        "movie_id":102,
-        "predicted_score":2.78,
-        "reason":"Predicted by ONNX model"
+        "movie_id": 102,
+        "predicted_score": 2.78,
+        "reason": "Predicted by ONNX model"
       }
     ]
   },
-  "error":null
+  "error": null
 }
 ```
 
@@ -168,4 +175,3 @@ DVC используется для версионирования данных.
 - **Откатить до предыдущей версии:** `poetry run dvc checkout`
 
 Данные версионируются автоматически при добавлении `.dvc` файлов в репозиторий.
-

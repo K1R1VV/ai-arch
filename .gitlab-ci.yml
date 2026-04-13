@@ -1,0 +1,41 @@
+stages:
+  - test
+  - train
+  - build
+
+variables:
+  MLFLOW_TRACKING_URI: "http://localhost:5000"
+
+before_script:
+  - pip install poetry
+  - poetry config virtualenvs.create false
+  - poetry install --no-interaction
+
+test-code:
+  stage: test
+  script:
+    - poetry run ruff check . --fix || true
+    - poetry run python scripts/quality_gate.py
+
+train-model:
+  stage: train
+  script:
+    - docker compose up -d mlflow
+    - sleep 5
+    - poetry run python scripts/train_model.py
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"'
+
+build-images:
+  stage: build
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -f Dockerfile.api -t $CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHA .
+    - docker push $CI_REGISTRY_IMAGE/api:$CI_COMMIT_SHA
+    - docker build -f Dockerfile.worker -t $CI_REGISTRY_IMAGE/worker:$CI_COMMIT_SHA .
+    - docker push $CI_REGISTRY_IMAGE/worker:$CI_COMMIT_SHA
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"'
