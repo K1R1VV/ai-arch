@@ -110,8 +110,11 @@ jobs:
       - name: Подготовка тегов для образов
         id: meta
         run: |
-          echo "IMAGE_ID=ghcr.io/${{ github.repository }}" >> $GITHUB_ENV
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_ID=ghcr.io/${REPO_LOWER}" >> $GITHUB_ENV
           echo "VERSION=${{ github.sha }}" >> $GITHUB_ENV
+          echo "Image ID: ghcr.io/${REPO_LOWER}"
+          echo "Version: ${{ github.sha }}"
 
       - name: Сборка и публикация API образа
         run: |
