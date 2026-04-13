@@ -34,7 +34,7 @@ jobs:
       - name: Запуск линтера (ruff)
         run: poetry run ruff check src/ scripts/ --exit-zero
 
-      - name: Quality Gate: проверка метрики модели
+      - name: Quality Gate проверка метрики модели
         run: poetry run python scripts/quality_gate.py
 
   train:
