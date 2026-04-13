@@ -161,8 +161,6 @@ poetry run pytest tests/ -v -s
 
 ```bash
 poetry run pytest tests/test_cli.py -v
-poetry run pytest tests/test_storage_and_sync.py -v
-poetry run pytest tests/test_onnx_model.py -v
 poetry run pytest tests/test_async.py -v
 ```
 
