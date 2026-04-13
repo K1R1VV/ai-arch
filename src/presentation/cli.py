@@ -1,10 +1,10 @@
 import sys
 import logging
 import os
-import pandas as pd
 from pathlib import Path
-from src.application.services import RecommendationService
-from src.infrastructure.onnx_model import ONNXMovieRecommender
+import pandas as pd
+
+from src.presentation.dependencies import get_model, get_service
 
 
 logging.basicConfig(
@@ -64,21 +64,18 @@ def load_candidate_movies(data_path: str, exclude_user_id: int = None) -> list[d
 
 def main():
     data_path = "data/ratings.csv"
-    model_path = "models/movie_recommender.onnx"
-    
-    if not Path(model_path).exists():
-        logger.info(f"[CLI] ERROR: Модель не найдена: {model_path}")
-        logger.info("[CLI] Выполните синхронизацию модели")
-        sys.exit(1)
-    
     try:
-        logger.info(f"[CLI] Загрузка ONNX модели: {model_path}")
-        model = ONNXMovieRecommender(model_path=model_path)
-    except Exception as e:
-        logger.error(f"[CLI] ERROR: Не удалось загрузить модель: {e}")
+        logger.info("[CLI] Загрузка модели из MLflow Registry...")
+        model = get_model()
+        rec_service = get_service(model=model)
+        
+    except FileNotFoundError as e:
+        logger.error(f"[CLI] ERROR: Модель не найдена ни в MLflow, ни локально: {e}")
+        logger.error("[CLI] Запустите сначала: poetry run python scripts/train_model.py")
         sys.exit(1)
-    
-    rec_service = RecommendationService(model=model)
+    except Exception as e:
+        logger.error(f"[CLI] ERROR: Не удалось инициализировать сервис: {type(e).__name__}: {e}")
+        sys.exit(1)
     
     user_id = 1
     if len(sys.argv) > 1:
@@ -88,12 +85,10 @@ def main():
             logger.error("[CLI] Invalid user_id. Using default 1.")
     
     logger.info(f"\n[CLI] Генерация рекомендаций для User ID: {user_id}")
-
     candidates = load_candidate_movies(data_path, exclude_user_id=user_id)
     if not candidates:
         logger.info("[CLI] ERROR: Нет фильмов-кандидатов для рекомендации")
         sys.exit(1)
-
     try:
         results = rec_service.get_recommendations(
             user_id=user_id,
@@ -103,7 +98,7 @@ def main():
     except Exception as e:
         logger.error(f"[CLI] ERROR при генерации рекомендаций: {e}")
         sys.exit(1)
-    
+
     if not results:
         logger.error("[CLI] No recommendations found for this user.")
     else:

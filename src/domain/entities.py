@@ -46,17 +46,6 @@ class RecommendRequest(BaseModel):
     top_n: Optional[int] = Field(3, ge=1, le=10)
 
 
-class SyncDataRequest(BaseModel):
-    remote_path: str = Field("data/ratings.csv")
-    local_path: str = Field("data/ratings.csv")
-    force: bool = Field(True)
-
-
-class SyncResponse(BaseModel):
-    status: str
-    message: str
-
-
 class HealthResponse(BaseModel):
     status: str
     version: str
