@@ -1,6 +1,6 @@
-# tests/test_cli.py
 import sys
 import json
+import os
 import pytest
 import pandas as pd
 import numpy as np
@@ -11,24 +11,15 @@ from src.presentation.cli import main as cli_main, load_candidate_movies
 from src.domain.entities import Recommendation
 
 
-# ============================================================================
-# 🎬 Тесты CLI (интеграционные с моками зависимостей)
-# ============================================================================
-
 class TestMovieRecommenderCLI:
-    """Тесты CLI-интерфейса с мокированием MLflow и сервисов"""
-
     @pytest.fixture(autouse=True)
     def reset_sys(self):
-        """Сбрасывает sys.stdout/stderr после каждого теста"""
         yield
         sys.stdout = sys.__stdout__
         sys.stderr = sys.__stderr__
 
     @pytest.mark.parametrize("user_id", [1, 2, 100])
     def test_cli_success_with_valid_user_id(self, user_id, tmp_path):
-        """CLI успешно генерирует рекомендации для валидного user_id"""
-        # Создаём тестовый датасет
         data_file = tmp_path / "ratings.csv"
         df = pd.DataFrame({
             'user_id': [1, 1, 2, 2, 3, user_id],
@@ -39,7 +30,6 @@ class TestMovieRecommenderCLI:
         })
         df.to_csv(data_file, index=False)
 
-        # Мокаем загрузку модели через dependencies.py
         mock_model = MagicMock()
         mock_service = MagicMock()
         mock_service.get_recommendations.return_value = [
@@ -52,11 +42,9 @@ class TestMovieRecommenderCLI:
         with patch('src.presentation.cli.get_model', return_value=mock_model):
             with patch('src.presentation.cli.get_service', return_value=mock_service):
                 with patch.object(sys, 'argv', test_args):
-                    # Перенаправляем вывод для захвата
                     captured = StringIO()
                     sys.stdout = captured
-                    
-                    # Запускаем CLI — не должно выбросить SystemExit с кодом != 0
+
                     exit_code = 0
                     try:
                         cli_main()
@@ -64,14 +52,11 @@ class TestMovieRecommenderCLI:
                         exit_code = e.code if isinstance(e.code, int) else 0
                     
                     output = captured.getvalue()
-                    
-                    # Проверяем успешное выполнение
                     assert exit_code == 0, f"CLI завершился с кодом {exit_code}"
                     assert "рекомендаций" in output.lower() or "recommendation" in output.lower()
                     mock_service.get_recommendations.assert_called_once()
 
     def test_cli_model_not_found(self, tmp_path):
-        """CLI корректно обрабатывает отсутствие модели"""
         data_file = tmp_path / "ratings.csv"
         pd.DataFrame(columns=['user_id', 'movie_id', 'year', 'genre', 'rating']).to_csv(data_file, index=False)
 
@@ -94,8 +79,6 @@ class TestMovieRecommenderCLI:
                 assert "не найдена" in output.lower() or "not found" in output.lower()
 
     def test_cli_no_candidates(self, tmp_path):
-        """CLI корректно обрабатывает пустой список кандидатов"""
-        # Пустой датасет
         data_file = tmp_path / "ratings.csv"
         pd.DataFrame(columns=['user_id', 'movie_id', 'year', 'genre', 'rating']).to_csv(data_file, index=False)
 
@@ -113,22 +96,14 @@ class TestMovieRecommenderCLI:
                         cli_main()
                     except SystemExit as e:
                         exit_code = e.code if isinstance(e.code, int) else 0
-                    
-                    # Допускаем выход с кодом 1 при отсутствии кандидатов
+
                     output = captured.getvalue()
                     assert "кандидатов" in output.lower() or "candidates" in output.lower() or exit_code == 1
 
 
-# ============================================================================
-# 📊 Тесты функции load_candidate_movies (юнит-тесты)
-# ============================================================================
-
 class TestLoadCandidateMovies:
-    """Юнит-тесты для функции загрузки фильмов-кандидатов"""
-
     @pytest.fixture
     def valid_csv(self, tmp_path):
-        """Создаёт валидный CSV-файл с тестовыми данными"""
         def _create(data: dict, filename: str = "test.csv") -> str:
             path = tmp_path / filename
             pd.DataFrame(data).to_csv(path, index=False)
@@ -136,7 +111,6 @@ class TestLoadCandidateMovies:
         return _create
 
     def test_load_valid_candidates(self, valid_csv):
-        """Загружает корректные данные с фильтрацией просмотренных фильмов"""
         csv_path = valid_csv({
             'user_id': [1, 1, 2, 2, 3],
             'movie_id': [101, 102, 101, 103, 102],
@@ -146,13 +120,11 @@ class TestLoadCandidateMovies:
         })
 
         result = load_candidate_movies(csv_path, exclude_user_id=1)
-        
-        # Проверяем, что фильмы пользователя 1 исключены
+
         viewed_by_user1 = {101, 102}
         for candidate in result:
             assert candidate['movie_id'] not in viewed_by_user1
-        
-        # Проверяем структуру результата
+
         assert len(result) > 0
         for item in result:
             assert 'movie_id' in item
@@ -161,22 +133,19 @@ class TestLoadCandidateMovies:
             assert isinstance(item['movie_id'], int)
 
     def test_load_missing_columns(self, valid_csv):
-        """Возвращает пустой список при отсутствии обязательных колонок"""
         csv_path = valid_csv({
             'movie_id': [101, 102],
-            'title': ['Movie A', 'Movie B']  # Нет required columns
+            'title': ['Movie A', 'Movie B']
         })
 
         result = load_candidate_movies(csv_path)
         assert result == []
 
     def test_load_nonexistent_file(self):
-        """Возвращает пустой список для несуществующего файла"""
         result = load_candidate_movies("/nonexistent/path/data.csv")
         assert result == []
 
     def test_load_with_nan_values(self, valid_csv):
-        """Корректно обрабатывает NaN-значения в данных"""
         csv_path = valid_csv({
             'user_id': [1, 2, np.nan],
             'movie_id': [101, 102, 103],
@@ -187,15 +156,12 @@ class TestLoadCandidateMovies:
 
         result = load_candidate_movies(csv_path)
         
-        # Должны загрузиться валидные записи
         assert len(result) >= 1
-        # Проверка дефолтных значений для NaN
         for item in result:
-            assert isinstance(item['year'], int)  # Дефолт 2023
-            assert isinstance(item['genre'], str)  # Дефолт 'Action'
+            assert isinstance(item['year'], int)
+            assert isinstance(item['genre'], str)
 
     def test_exclude_user_id_none(self, valid_csv):
-        """Без exclude_user_id загружает все уникальные фильмы"""
         csv_path = valid_csv({
             'user_id': [1, 1, 2],
             'movie_id': [101, 102, 103],
@@ -205,27 +171,18 @@ class TestLoadCandidateMovies:
         })
 
         result = load_candidate_movies(csv_path, exclude_user_id=None)
-        
-        # Все 3 фильма должны быть в кандидатах
+
         movie_ids = {item['movie_id'] for item in result}
         assert movie_ids == {101, 102, 103}
 
 
-# ============================================================================
-# 🧪 Тесты конфигурации и окружения
-# ============================================================================
-
 class TestConfiguration:
-    """Тесты конфигурации через переменные окружения"""
-
     @pytest.mark.parametrize("env_var,default,override,expected", [
         ("MLFLOW_TRACKING_URI", "http://localhost:5000", "http://prod:5000", "http://prod:5000"),
         ("MODEL_PATH", "models/movie_recommender.onnx", "/custom/path.onnx", "/custom/path.onnx"),
         ("LOG_LEVEL", "INFO", "DEBUG", "DEBUG"),
     ])
     def test_env_var_override(self, env_var, default, override, expected, monkeypatch):
-        """Переменные окружения корректно переопределяют дефолты"""
-        # Сбрасываем и устанавливаем тестовое значение
         monkeypatch.delenv(env_var, raising=False)
         assert os.getenv(env_var, default) == default
         
@@ -233,18 +190,11 @@ class TestConfiguration:
         assert os.getenv(env_var, default) == expected
 
     def test_mlflow_uri_default(self):
-        """Дефолтный URI MLflow соответствует документации"""
         from src.presentation.dependencies import MLFLOW_TRACKING_URI
         assert MLFLOW_TRACKING_URI == "http://localhost:5000" or MLFLOW_TRACKING_URI.startswith("http")
 
 
-# ============================================================================
-# 🎯 Тесты RecommendationService (интеграция с моделью)
-# ============================================================================
-
 class TestRecommendationServiceIntegration:
-    """Интеграционные тесты сервиса рекомендаций"""
-
     @pytest.fixture
     def mock_onnx_model(self):
         model = MagicMock()
