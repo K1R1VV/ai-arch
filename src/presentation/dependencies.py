@@ -36,5 +36,5 @@ def get_model() -> IMovieRecommender:
     return ONNXMovieRecommender(model_path)
 
 
-def get_recommendation_service(model: IMovieRecommender = Depends(get_model)) -> RecommendationService:
+def get_service(model: IMovieRecommender = Depends(get_model)) -> RecommendationService:
     return RecommendationService(model=model)

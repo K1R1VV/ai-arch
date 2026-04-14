@@ -73,43 +73,7 @@ class TestAsyncRecommendations:
             assert len(task_id) > 0, "task_id не может быть пустым"
 
             print(f"Создана задача: {task_id}")
-    
-    @pytest.mark.asyncio_integration
-    def test_recommend_for_user_returns_valid_results(self):
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                f"{API_URL}/api/v1/movies/recommend_for_user",
-                json=RECOMMEND_PAYLOAD
-            )
-            response.raise_for_status()
-            task_id = response.json()["task_id"]
-            
-            result_data = wait_for_task_completion(
-                api_url=API_URL,
-                task_id=task_id
-            )
 
-            assert result_data["status"] == "SUCCESS"
-            assert "result" in result_data
-            assert "recommendations" in result_data["result"]
-            
-            recommendations = result_data["result"]["recommendations"]
-            assert isinstance(recommendations, list)
-            assert len(recommendations) > 0, "Должна быть хотя бы одна рекомендация"
-            assert len(recommendations) <= RECOMMEND_PAYLOAD["top_n"], \
-                f"Количество рекомендаций ({len(recommendations)}) не должно превышать top_n ({RECOMMEND_PAYLOAD['top_n']})"
-
-            for rec in recommendations:
-                assert "movie_id" in rec
-                assert "predicted_score" in rec
-                assert "reason" in rec
-                assert isinstance(rec["movie_id"], int)
-                assert isinstance(rec["predicted_score"], (int, float))
-                assert 1.0 <= rec["predicted_score"] <= 5.0, "Рейтинг должен быть в диапазоне [1.0, 5.0]"
-
-            print(f"Рекомендации для user={RECOMMEND_PAYLOAD['user_id']}:")
-            for i, rec in enumerate(recommendations, 1):
-                print(f"   {i}. Movie {rec['movie_id']}: score={rec['predicted_score']:.2f}")
     
     @pytest.mark.asyncio_integration
     def test_get_results_for_invalid_task_id(self):

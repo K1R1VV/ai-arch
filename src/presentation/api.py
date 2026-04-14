@@ -4,7 +4,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, status
+from fastapi import FastAPI, BackgroundTasks, status
 from celery.result import AsyncResult
 
 from src.domain.entities import (
@@ -13,8 +13,6 @@ from src.domain.entities import (
     PredictRatingResponse,
     MovieCandidate,
     RecommendRequest,
-    SyncDataRequest,
-    SyncResponse,
     HealthResponse,
     TaskResponse,
     TaskResultResponse
@@ -24,7 +22,7 @@ from src.domain.interfaces import IMovieRecommender
 from src.application.services import RecommendationService
 from src.presentation.dependencies import (
     get_model,
-    get_recommendation_service
+    get_service
 )
 from src.presentation.celery_app import celery_app
 from src.presentation.tasks import recommend_for_user_task, predict_rating_task

@@ -1,52 +1,53 @@
+from src.application.services import RecommendationService
+from src.presentation.dependencies import get_model
 from src.presentation.celery_app import celery_app
-from src.presentation.dependencies import get_model, get_recommendation_service
-from src.domain.entities import Recommendation
+from src.config.genre_encoding import encode_genre
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-model = get_model()
-service = get_recommendation_service(model=model)
+service = RecommendationService(model=get_model())
 
 
-@celery_app.task(name="recommend_for_user", bind=True)
-def recommend_for_user_task(self, user_id: int, candidate_movies: list[dict], top_n: int = 3) -> dict:
-    try:
-        recommendations = service.get_recommendations(
-            user_id=user_id,
-            candidate_movies=candidate_movies,
-            top_n=top_n
-        )
+@celery_app.task(name="recommend_for_user_task")
+def recommend_for_user_task(user_id: int, candidate_movies: list, top_n: int = 3) -> dict:
+    logger.info(f"[Celery] Задача рекомендаций: user={user_id}, movies={len(candidate_movies)}")
 
-        return {
-            "user_id": user_id,
-            "recommendations": [
-                {
-                    "movie_id": rec.movie_id,
-                    "predicted_score": rec.predicted_score,
-                    "reason": rec.reason
-                }
-                for rec in recommendations
-            ]
-        }
-        
-    except Exception as e:
-        raise e
+    encoded_candidates = []
+    for c in candidate_movies:
+        genre_str = c.get("genre", "Action")
+        encoded_candidates.append({
+            "movie_id": c["movie_id"],
+            "year": c.get("year", 2023),
+            "genre_encoded": encode_genre(genre_str)
+        })
+
+    recommendations = service.get_recommendations(user_id, encoded_candidates, top_n)
+
+    result = {
+        "recommendations": [
+            {
+                "movie_id": rec.movie_id,
+                "predicted_score": rec.predicted_score,
+                "reason": rec.reason
+            }
+            for rec in recommendations
+        ]
+    }
+    
+    return result 
 
 
-@celery_app.task(name="predict_rating", bind=True)
-def predict_rating_task(self, user_id: int, movie_id: int, year: int = 2023, genre: str = "Action") -> dict:
-    try:       
-        rating = service.predict_rating(
-            user_id=user_id,
-            movie_id=movie_id,
-            year=year,
-            genre=genre
-        )
-        
-        return {
-            "user_id": user_id,
-            "movie_id": movie_id,
-            "predicted_rating": round(rating, 2)
-        }
-        
-    except Exception as e:
-        raise e
+@celery_app.task(name="predict_rating_task")
+def predict_rating_task(user_id: int, movie_id: int, year: int = 2023, genre: str = "Action"):
+    logger.info(f"[Celery] Предсказание рейтинга: user={user_id}, movie={movie_id}")
+
+    genre_encoded = encode_genre(genre)
+    score = service.predict_rating(user_id, movie_id, year, genre_encoded)
+    
+    return {
+        "user_id": user_id,
+        "movie_id": movie_id,
+        "predicted_rating": round(score, 2)
+    }

@@ -36,26 +36,18 @@ copy .env.example .env
 poetry install
 ```
 
-### 3. Запуск контейнеров
-
-Запустим mlflow
-
-```bash
-docker-compose up -d mlflow
-```
-
-### 3. Обучение модели
-
-```bash
-poetry run python scripts/train_model.py
-```
-
-### 4. Запуск сервиса
+### 3. Запуск сервиса
 
 Запустим всю систему
 
 ```bash
-docker-compose up -d
+docker-compose up -d --build
+```
+
+### 4. Обучение модели
+
+```bash
+poetry run python scripts/train_model.py
 ```
 
 **FastAPI сервер (рекомендации через HTTP API):**
