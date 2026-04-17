@@ -1,17 +1,14 @@
 import os
 import logging
-from pathlib import Path
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import Optional
 
-from fastapi import FastAPI, BackgroundTasks, status
+from fastapi import FastAPI, BackgroundTasks, status, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from celery.result import AsyncResult
 
 from src.domain.entities import (
-    Recommendation,
     PredictRatingRequest,
-    PredictRatingResponse,
-    MovieCandidate,
     RecommendRequest,
     HealthResponse,
     TaskResponse,
@@ -22,8 +19,10 @@ from src.domain.interfaces import IMovieRecommender
 from src.application.services import RecommendationService
 from src.presentation.dependencies import (
     get_model,
-    get_service
+    check_model_status,
+    reload_model
 )
+from src.infrastructure.onnx_model import UninitializedRecommender
 from src.presentation.celery_app import celery_app
 from src.presentation.tasks import recommend_for_user_task, predict_rating_task
 
@@ -51,13 +50,70 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(RuntimeError)
+async def runtime_error_handler(request, exc: RuntimeError):
+    error_msg = str(exc).lower()
+    if "model not initialized" in error_msg or "not found" in error_msg or "alias" in error_msg:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "error": "service_unavailable",
+                "detail": "Model is not initialized. Please train and register a model first.",
+                "hint": "Run: poetry run python scripts/train_model.py",
+                "mlflow_ui": os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+            }
+        )
+    logger.error(f"Unhandled RuntimeError: {exc}")
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"error": "internal_error", "detail": str(exc)}
+    )
+
+
+@app.get("/health", response_model=HealthResponse, tags=["Health"])
+def health_check():
+    model_status = check_model_status()
+    
+    if model_status["model_loaded"]:
+        return HealthResponse(
+            status="healthy",
+            version="1.0.0",
+            model_loaded=True
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "status": "degraded",
+                "model_error": model_status.get("error"),
+                "hint": "Train model: poetry run python scripts/train_model.py"
+            }
+        )
+
+
+@app.post("/admin/reload-model", tags=["Admin"], include_in_schema=os.getenv("ENV") != "production")
+def admin_reload_model():
+    try:
+        new_model = reload_model()
+        return {"status": "success", "message": "Model reloaded successfully", "model_type": type(new_model).__name__}
+    except Exception as e:
+        logger.error(f"Failed to reload model: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reload model: {str(e)}"
+        )
+
+
 @app.post("/api/v1/movies/recommend_for_user", response_model=TaskResponse, status_code=status.HTTP_202_ACCEPTED, tags=["Recommendations Async"])
 def recommend_for_user_async(
     request: RecommendRequest,
     background_tasks: BackgroundTasks
 ):
-    logger.info(f"Запрос асинхронных рекомендаций: user={request.user_id}")
+    model = get_model()
+    if isinstance(model, UninitializedRecommender):
+        raise RuntimeError(model.error_message)
     
+    logger.info(f"Запрос асинхронных рекомендаций: user={request.user_id}")
     candidates_serialized = [
         {
             'movie_id': c.movie_id,
@@ -108,6 +164,10 @@ def get_recommendation_results(task_id: str):
 def predict_rating_async(
     request: PredictRatingRequest,
 ):
+    model = get_model()
+    if isinstance(model, UninitializedRecommender):
+        raise RuntimeError(model.error_message)
+    
     logger.debug(f"Запрос асинхронного предсказания: user={request.user_id}, movie={request.movie_id}")
     
     task = predict_rating_task.delay(

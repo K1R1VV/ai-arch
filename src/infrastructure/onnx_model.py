@@ -69,3 +69,16 @@ class ONNXMovieRecommender(IMovieRecommender):
             )
             for m in scored[:top_n]
         ]
+    
+
+class UninitializedRecommender(IMovieRecommender):  
+    def __init__(self, error_message: str = "Model not initialized"):
+        self.error_message = error_message
+        self.is_loaded = False
+        logger.warning(f"[ONNX] Модель не инициализирована: {error_message}")
+
+    def predict_rating(self, user_id: int, movie_id: int, year: int = 2023, genre_encoded: int = 0) -> float:
+        raise RuntimeError(self.error_message)
+
+    def recommend(self, user_id: int, candidate_movies: List[dict], top_n: int = 3) -> List[Recommendation]:
+        raise RuntimeError(self.error_message)

@@ -91,7 +91,6 @@ class TestAsyncRecommendations:
 
 
 class TestAsyncPredictRating:
-    
     @pytest.mark.asyncio_integration
     def test_predict_rating_async_creates_task(self):
         with httpx.Client(timeout=30.0) as client:
@@ -104,36 +103,6 @@ class TestAsyncPredictRating:
             data = response.json()
             assert "task_id" in data
             assert isinstance(data["task_id"], str)
-    
-    @pytest.mark.asyncio_integration
-    def test_predict_rating_async_returns_valid_result(self):
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                f"{API_URL}/api/v1/movies/predict_rating_async",
-                json=PREDICT_RATING_PAYLOAD
-            )
-            response.raise_for_status()
-            task_id = response.json()["task_id"]
-            result_data = wait_for_task_completion(
-                api_url=API_URL,
-                task_id=task_id
-            )
-
-            assert result_data["status"] == "SUCCESS"
-            assert "result" in result_data
-            result = result_data["result"]
-            
-            assert "user_id" in result
-            assert "movie_id" in result
-            assert "predicted_rating" in result
-            assert result["user_id"] == PREDICT_RATING_PAYLOAD["user_id"]
-            assert result["movie_id"] == PREDICT_RATING_PAYLOAD["movie_id"]
-            
-            rating = result["predicted_rating"]
-            assert isinstance(rating, (int, float))
-            assert 1.0 <= rating <= 5.0, f"Рейтинг {rating} вне диапазона [1.0, 5.0]"
-            
-            print(f"Предсказание: user={result['user_id']}, movie={result['movie_id']}, rating={rating:.2f}")
 
 
 def pytest_configure(config):

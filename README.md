@@ -1,4 +1,5 @@
 [![Movie Recommender CI/CD](https://github.com/K1R1VV/ai-arch/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/K1R1VV/ai-arch/actions/workflows/ci.yml)
+
 # Лабораторная работа №5: Вариант 10 (Система рекомендаций фильмов)
 
 ## Описание
@@ -57,6 +58,23 @@ poetry run python scripts/train_model.py
 ## API Endpoints
 
 ### POST /api/v1/movies/predict_rating_async
+
+Если при запросах в ответ приходит
+
+```json
+{
+  "error": "service_unavailable",
+  "detail": "Model is not initialized. Please train and register a model first.",
+  "hint": "Run: poetry run python scripts/train_model.py",
+  "mlflow_ui": "http://mlflow:5000"
+}
+```
+
+Необходимо выполнить запрос:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/admin/reload-model"
+```
 
 Предсказать рейтинг
 

@@ -21,12 +21,12 @@ services:
       - "5000:5000"
     volumes:
       - ./mlflow_artifacts:/mlflow/artifacts
-      - mlflow_db:/mlflow/db
+      - ./mlflow_db:/mlflow/db
     command: >
       mlflow server
       --host 0.0.0.0
       --port 5000
-      --backend-store-uri file:///mlflow/db/mlflow.db
+      --backend-store-uri sqlite:////mlflow/db/mlflow.db
       --artifacts-destination /mlflow/artifacts
       --serve-artifacts
     networks:
@@ -36,7 +36,7 @@ services:
       interval: 30s
       timeout: 20s
       retries: 5
-      start_period: 60s
+      start_period: 5s
 
   # API сервис (FastAPI)
   api:
