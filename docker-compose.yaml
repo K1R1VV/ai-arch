@@ -1,5 +1,4 @@
 services:
-  # Брокер сообщений
   broker:
     image: redis:7-alpine
     container_name: movie-rec-redis
@@ -13,7 +12,6 @@ services:
       timeout: 5s
       retries: 3
 
-  # MLflow Tracking Server
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.11.3
     container_name: movie-rec-mlflow
@@ -22,23 +20,27 @@ services:
     volumes:
       - ./mlflow_artifacts:/mlflow/artifacts
       - ./mlflow_db:/mlflow/db
-    command: >
-      mlflow server
-      --host 0.0.0.0
-      --port 5000
-      --backend-store-uri sqlite:////mlflow/db/mlflow.db
-      --artifacts-destination /mlflow/artifacts
-      --serve-artifacts
+    command:
+      - mlflow
+      - server
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "5000"
+      - --backend-store-uri
+      - sqlite:////mlflow/db/mlflow.db
+      - --artifacts-destination
+      - file:///mlflow/artifacts
+      - --serve-artifacts
     networks:
       - ai-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:5000/\")' || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:5000/health\")' || exit 1"]
       interval: 30s
-      timeout: 20s
+      timeout: 30s
       retries: 5
-      start_period: 5s
+      start_period: 60s
 
-  # API сервис (FastAPI)
   api:
     build:
       context: .
@@ -61,7 +63,6 @@ services:
     volumes:
       - ./models:/app/models
 
-  # Worker сервис
   worker:
     build:
       context: .
@@ -83,10 +84,6 @@ services:
       - ai-network
     volumes:
       - ./models:/app/models
-
-# Volumes
-volumes:
-  mlflow_db:
 
 networks:
   ai-network:

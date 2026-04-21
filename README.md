@@ -47,6 +47,8 @@ docker-compose up -d --build
 
 ### 4. Обучение модели
 
+Для справки: в качестве алгоритма используется RandomForestRegressor, поэтому embedding_size не логируется
+
 ```bash
 poetry run python scripts/train_model.py
 ```
@@ -184,3 +186,14 @@ DVC используется для версионирования данных.
 - **Откатить до предыдущей версии:** `poetry run dvc checkout`
 
 Данные версионируются автоматически при добавлении `.dvc` файлов в репозиторий.
+
+## Model Registry
+
+Для управления версиями модели используется [MLflow Model Registry](https://mlflow.org/docs/latest/model-registry.html).
+
+- Модель регистрируется под именем `movie_recommender`
+- Для production-использования назначается алиас `production`:
+
+```bash
+  models:/movie_recommender@production
+```

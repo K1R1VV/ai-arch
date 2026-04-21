@@ -44,10 +44,13 @@ def train():
         X, y, test_size=0.2, random_state=42
     )
     
-    params = {"n_estimators": 50, "max_depth": 5, "random_state": 42}
+    params = {"n_estimators": 50, "max_depth": 5, "random_state": 42 }
     
     with mlflow.start_run() as run:
-        mlflow.log_params(params)
+        mlflow.log_params({
+            "n_estimators": params["n_estimators"],
+            "max_depth": params["max_depth"]
+        })
         model = RandomForestRegressor(**params)
         model.fit(X_train, y_train)
 
