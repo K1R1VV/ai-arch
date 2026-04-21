@@ -36,7 +36,7 @@ jobs:
           poetry run ruff check src/ scripts/ --fix || true
           poetry run ruff check src/ scripts/
 
-      - name: Quality Gate: проверка метрики модели (RMSE < 0.9)
+      - name: Quality Gate проверка метрики модели (RMSE < 0.9)
         run: poetry run python scripts/quality_gate.py
 
   train:
@@ -130,7 +130,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Подготовка тегов для образов (lowercase + Variant 10 names)
+      - name: Подготовка тегов для образов
         run: |
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "IMAGE_BASE=${{ env.REGISTRY }}/${REPO_LOWER}" >> $GITHUB_ENV
@@ -138,7 +138,7 @@ jobs:
           echo "Image base: ${{ env.REGISTRY }}/${REPO_LOWER}"
           echo "Version: ${{ github.sha }}"
 
-      - name: Сборка и публикация API образа (Variant 10: movies-api)
+      - name: Сборка и публикация API образа
         run: |
           docker build -f Dockerfile.api \
             -t ${{ env.IMAGE_BASE }}/movies-api:${{ env.VERSION }} \
@@ -146,7 +146,7 @@ jobs:
           docker push ${{ env.IMAGE_BASE }}/movies-api:${{ env.VERSION }}
           docker push ${{ env.IMAGE_BASE }}/movies-api:latest
 
-      - name: Сборка и публикация Worker образа (Variant 10: movies-worker)
+      - name: Сборка и публикация Worker образа
         run: |
           docker build -f Dockerfile.worker \
             -t ${{ env.IMAGE_BASE }}/movies-worker:${{ env.VERSION }} \
