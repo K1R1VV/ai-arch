@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  broker:
+    image: redis:7-alpine
+    container_name: movies-redis
+    networks: [movies-net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  api:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-username}/${GITHUB_REPOSITORY_NAME:-ai-arch}/movies-api:latest
+    container_name: movies-api
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://broker:6379/0
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
+      - MODEL_PATH=/app/models/movie_recommender.onnx
+      - LOG_LEVEL=INFO
+      - ADMIN_RELOAD_TOKEN=${ADMIN_RELOAD_TOKEN:-}
+    depends_on:
+      broker:
+        condition: service_healthy
+    networks: [movies-net]
+    volumes:
+      - ./models:/app/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  worker:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-your-username}/${GITHUB_REPOSITORY_NAME:-ai-arch}/movies-worker:latest
+    container_name: movies-worker
+    environment:
+      - REDIS_URL=redis://broker:6379/0
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}
+      - MODEL_PATH=/app/models/movie_recommender.onnx
+      - LOG_LEVEL=INFO
+    depends_on:
+      broker:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    networks: [movies-net]
+    volumes:
+      - ./models:/app/models
+    restart: unless-stopped
+
+networks:
+  movies-net:
+    driver: bridge

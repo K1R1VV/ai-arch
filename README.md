@@ -197,3 +197,87 @@ DVC используется для версионирования данных.
 ```bash
   models:/movie_recommender@production
 ```
+
+## Полный цикл: проверка и переключение модели на Production (GitHub)
+
+### 1 Настройка GitHub Secrets
+
+Перейдите в репозиторий - **Settings** - **Secrets and variables** - **Actions** - **New repository secret**:
+
+| Secret                | Описание                                        | Пример                         |
+| --------------------- | ----------------------------------------------- | ------------------------------ |
+| `MLFLOW_TRACKING_URI` | Адрес внешнего MLflow-сервера                   | `http://<your-mlflow-ip>:5000` |
+| `MLFLOW_USERNAME`     | Логин для MLflow (если включена аутентификация) | `admin`                        |
+| `MLFLOW_PASSWORD`     | Пароль для MLflow                               | `***`                          |
+
+---
+
+### 2 Развёртывание внешнего MLflow-сервера
+
+MLflow должен быть доступен **и из GitHub Actions, и из production-окружения**.
+
+```bash
+mkdir -p ~/mlflow/{artifacts,db}
+
+docker run -d \
+  --name mlflow-prod \
+  -p 5000:5000 \
+  -v ~/mlflow/artifacts:/mlflow/artifacts \
+  -v ~/mlflow/db:/mlflow/db \
+  --restart unless-stopped \
+  ghcr.io/mlflow/mlflow:v2.11.3 \
+  mlflow server \
+    --host 0.0.0.0 \
+    --port 5000 \
+    --backend-store-uri sqlite:////mlflow/db/mlflow.db \
+    --artifacts-destination file:///mlflow/artifacts \
+    --serve-artifacts
+```
+
+### 3 Коммит и пуш в ветку main
+
+```bash
+git add .
+git commit -m "feat: подготовка к production-деплою"
+git push origin main
+```
+
+### 4 Проверка пайплайна в гитхаб
+
+Все стадии должны пройти успешно
+
+### 5 Проверка MLflow и переключение модели на Production
+
+1. Откройте веб-интерфейс: http://<your-mlflow-ip>:5000
+2. Перейдите в Experiments - Movie Recommendation
+3. Найдите последний run с метрикой rmse < 0.9
+4. Перейдите в Models - movie_recommender
+5. Выберите последнюю версию - секция Aliases
+6. Нажмите Edit - добавьте алиас production - Save
+
+### 6 Обновление production-системы
+
+1. Обновите переменные окружения (если изменился адрес MLflow)
+
+```bash
+echo "MLFLOW_TRACKING_URI=http://<your-mlflow-ip>:5000" > .env
+```
+
+2. Скачайте production compose-файл (если ещё не создан)
+
+```bash
+curl -O https://raw.githubusercontent.com/K1R1VV/ai-arch/main/docker-compose.prod.yml
+```
+
+3. Обновите систему — образы скачаются из GHCR автоматически
+
+```bash
+docker-compose -f docker-compose.prod.yml pull
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+4. Проверьте, что воркер загрузил новую модель
+
+```bash
+docker-compose -f docker-compose.prod.yml logs worker | grep "Модель скачана из MLflow"
+```

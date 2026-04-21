@@ -90,7 +90,6 @@ jobs:
           mkdir -p .mlflow-artifacts
           cp -r mlflow_artifacts/* .mlflow-artifacts/ 2>/dev/null || true
           cp -r mlflow_db/* .mlflow-artifacts/db/ 2>/dev/null || true
-        continue-on-error: true
 
       - name: Upload MLflow artifacts as GitHub artifact
         uses: actions/upload-artifact@v4
