@@ -59,12 +59,6 @@ docker-compose up -d
 curl -X POST "http://127.0.0.1:8000/qa" -H "Content-Type: application/json" -d "{\"question\": \"Что можно быстро приготовить из курицы и риса? Сложность легкая\"}"
 ```
 
-**Response:**
-
-```json
-{ "task_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
-```
-
 ## Запуск тестов
 
 ```bash
